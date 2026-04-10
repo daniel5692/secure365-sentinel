@@ -32,32 +32,12 @@ export default function Tenants() {
     setLoading(false);
   };
 
-  // Handle Microsoft redirect callback after admin consent
+  // Show error from redirect if present
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const adminConsent = params.get('admin_consent');
-    const returnedTenantId = params.get('tenant');
     const error = params.get('error');
-    const savedName = localStorage.getItem('pending_tenant_name');
-
-    if (adminConsent === 'True' && returnedTenantId) {
-      const name = savedName || returnedTenantId;
-      localStorage.removeItem('pending_tenant_name');
-      base44.entities.ConnectedTenant.create({
-        tenant_name: name,
-        tenant_id: returnedTenantId,
-        workspace_id: user?.id || 'default',
-        connection_status: 'connected',
-        consent_date: new Date().toISOString(),
-        total_scans: 0,
-      }).then(() => {
-        setConsentResult({ success: true });
-        loadTenants();
-      });
-      window.history.replaceState({}, '', '/tenants');
-    } else if (error) {
-      localStorage.removeItem('pending_tenant_name');
-      setConsentResult({ success: false, error: params.get('error_description') || error });
+    if (error) {
+      setConsentResult({ success: false, error: decodeURIComponent(error) });
       window.history.replaceState({}, '', '/tenants');
     }
   }, []);
@@ -70,7 +50,7 @@ export default function Tenants() {
     localStorage.setItem('pending_tenant_name', tenantName.trim());
     const res = await base44.functions.invoke('generateConsentUrl', {
       customer_tenant_id: 'common',
-      redirect_uri: window.location.origin + '/tenants',
+      redirect_uri: window.location.origin + '/',
     });
     const url = res?.data?.consent_url;
     if (url) {
@@ -91,7 +71,7 @@ export default function Tenants() {
     localStorage.setItem('pending_tenant_name', tenant.tenant_name);
     const res = await base44.functions.invoke('generateConsentUrl', {
       customer_tenant_id: tenant.tenant_id || 'common',
-      redirect_uri: window.location.origin + '/tenants',
+      redirect_uri: window.location.origin + '/',
     });
     if (res.data?.consent_url) {
       window.location.href = res.data.consent_url;

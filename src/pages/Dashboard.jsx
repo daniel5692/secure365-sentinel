@@ -4,15 +4,46 @@ import ScoreRing from "@/components/shared/ScoreRing";
 import DomainBreakdown from "@/components/dashboard/DomainBreakdown";
 import RecentScans from "@/components/dashboard/RecentScans";
 import { Button } from "@/components/ui/button";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
+import { useAuth } from "@/lib/AuthContext";
 
 export default function Dashboard() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [tenants, setTenants] = useState([]);
   const [scans, setScans] = useState([]);
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Handle Microsoft consent callback
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const adminConsent = params.get('admin_consent');
+    const returnedTenantId = params.get('tenant');
+    const error = params.get('error');
+
+    if (adminConsent === 'True' && returnedTenantId) {
+      const savedName = localStorage.getItem('pending_tenant_name') || returnedTenantId;
+      localStorage.removeItem('pending_tenant_name');
+      base44.entities.ConnectedTenant.create({
+        tenant_name: savedName,
+        tenant_id: returnedTenantId,
+        workspace_id: user?.id || 'default',
+        connection_status: 'connected',
+        consent_date: new Date().toISOString(),
+        total_scans: 0,
+      }).then(() => {
+        window.history.replaceState({}, '', '/');
+        navigate('/tenants');
+      });
+    } else if (error) {
+      localStorage.removeItem('pending_tenant_name');
+      window.history.replaceState({}, '', '/');
+      navigate('/tenants?error=' + encodeURIComponent(params.get('error_description') || error));
+    }
+  }, []);
 
   useEffect(() => {
     Promise.all([
