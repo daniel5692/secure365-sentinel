@@ -1,8 +1,8 @@
-import { Server, Plus, MoreVertical, ExternalLink, Wifi, WifiOff, Clock, Trash2 } from "lucide-react";
+import { Server, Plus, Wifi, WifiOff, Clock, Trash2, MoreVertical, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useState, useEffect } from "react";
@@ -21,8 +21,9 @@ export default function Tenants() {
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ tenant_name: '', domain: '', customer_tenant_id: '' });
-  const [saving, setSaving] = useState(false);
+  const [tenantName, setTenantName] = useState('');
+  const [connecting, setConnecting] = useState(false);
+  const [consentResult, setConsentResult] = useState(null);
 
   const loadTenants = async () => {
     setLoading(true);
@@ -31,37 +32,52 @@ export default function Tenants() {
     setLoading(false);
   };
 
+  // Handle Microsoft redirect callback after admin consent
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const adminConsent = params.get('admin_consent');
+    const returnedTenantId = params.get('tenant');
+    const error = params.get('error');
+    const savedName = localStorage.getItem('pending_tenant_name');
+
+    if (adminConsent === 'True' && returnedTenantId) {
+      const name = savedName || returnedTenantId;
+      localStorage.removeItem('pending_tenant_name');
+      base44.entities.ConnectedTenant.create({
+        tenant_name: name,
+        tenant_id: returnedTenantId,
+        workspace_id: user?.id || 'default',
+        connection_status: 'connected',
+        consent_date: new Date().toISOString(),
+        total_scans: 0,
+      }).then(() => {
+        setConsentResult({ success: true });
+        loadTenants();
+      });
+      window.history.replaceState({}, '', '/tenants');
+    } else if (error) {
+      localStorage.removeItem('pending_tenant_name');
+      setConsentResult({ success: false, error: params.get('error_description') || error });
+      window.history.replaceState({}, '', '/tenants');
+    }
+  }, []);
+
   useEffect(() => { loadTenants(); }, []);
 
-  const handleAdd = async () => {
-    if (!form.tenant_name) return;
-    setSaving(true);
-    // Create the tenant record first
-    const tenant = await base44.entities.ConnectedTenant.create({
-      tenant_name: form.tenant_name,
-      domain: form.domain,
-      tenant_id: form.customer_tenant_id,
-      workspace_id: user?.id || 'default',
-      connection_status: 'pending_consent',
-      total_scans: 0,
+  const handleConnect = async () => {
+    if (!tenantName.trim()) return;
+    setConnecting(true);
+    localStorage.setItem('pending_tenant_name', tenantName.trim());
+    // Get consent URL from backend (keeps CLIENT_ID secret-side)
+    const res = await base44.functions.invoke('generateConsentUrl', {
+      customer_tenant_id: 'common', // /common = Microsoft asks which tenant
+      redirect_uri: window.location.origin + '/tenants',
     });
-
-    // If customer tenant ID provided, generate consent URL and open it
-    if (form.customer_tenant_id) {
-      const res = await base44.functions.invoke('generateConsentUrl', {
-        customer_tenant_id: form.customer_tenant_id,
-        tenant_record_id: tenant.id,
-        redirect_uri: window.location.origin + '/tenants',
-      });
-      if (res.data?.consent_url) {
-        window.open(res.data.consent_url, '_blank');
-      }
+    if (res.data?.consent_url) {
+      window.location.href = res.data.consent_url; // same tab redirect
+    } else {
+      setConnecting(false);
     }
-
-    setForm({ tenant_name: '', domain: '', customer_tenant_id: '' });
-    setShowAdd(false);
-    setSaving(false);
-    loadTenants();
   };
 
   const handleDelete = async (id) => {
@@ -69,8 +85,20 @@ export default function Tenants() {
     loadTenants();
   };
 
+  const handleReConsent = async (tenant) => {
+    localStorage.setItem('pending_tenant_name', tenant.tenant_name);
+    const res = await base44.functions.invoke('generateConsentUrl', {
+      customer_tenant_id: tenant.tenant_id || 'common',
+      redirect_uri: window.location.origin + '/tenants',
+    });
+    if (res.data?.consent_url) {
+      window.location.href = res.data.consent_url;
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">ניהול טננטים</h1>
@@ -78,69 +106,63 @@ export default function Tenants() {
         </div>
         <Dialog open={showAdd} onOpenChange={setShowAdd}>
           <DialogTrigger asChild>
-            <Button className="gap-2">
-              <Plus className="w-4 h-4" />
-              חבר טננט חדש
-            </Button>
+            <Button className="gap-2"><Plus className="w-4 h-4" />חבר טננט חדש</Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-lg" dir="rtl">
+          <DialogContent className="sm:max-w-md" dir="rtl">
             <DialogHeader>
-              <DialogTitle>חיבור טננט Microsoft 365 חדש</DialogTitle>
-              <DialogDescription>
-                הזן את פרטי הטננט כדי להתחיל את תהליך ה-Consent. הלקוח יתבקש לאשר הרשאות קריאה בלבד.
-              </DialogDescription>
+              <DialogTitle>חיבור טננט Microsoft 365</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 mt-4">
+            <div className="space-y-5 mt-2">
               <div>
-                <Label>שם הטננט</Label>
+                <Label className="text-sm">שם הטננט</Label>
                 <Input
-                  placeholder="לדוגמה: Production Environment"
                   className="mt-1.5"
-                  value={form.tenant_name}
-                  onChange={e => setForm(f => ({ ...f, tenant_name: e.target.value }))}
+                  placeholder="לדוגמה: Contoso Production"
+                  value={tenantName}
+                  onChange={e => setTenantName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleConnect()}
                 />
+                <p className="text-[11px] text-muted-foreground mt-1.5">שם לזיהוי הסביבה באפליקציה</p>
               </div>
-              <div>
-                <Label>Tenant ID (Directory ID)</Label>
-                <Input
-                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                  className="mt-1.5 font-mono text-xs"
-                  dir="ltr"
-                  value={form.customer_tenant_id}
-                  onChange={e => setForm(f => ({ ...f, customer_tenant_id: e.target.value }))}
-                />
-                <p className="text-[10px] text-muted-foreground mt-1">נמצא ב: Azure Portal → Entra ID → Properties → Tenant ID</p>
+
+              <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4 space-y-1.5">
+                <p className="text-xs font-semibold text-blue-400 mb-2">מה יקרה אחרי לחיצה:</p>
+                <p className="text-xs text-muted-foreground">1. תועבר לדף ההתחברות של Microsoft</p>
+                <p className="text-xs text-muted-foreground">2. תיכנס עם חשבון Admin של הטננט הלקוח</p>
+                <p className="text-xs text-muted-foreground">3. תאשר הרשאות קריאה בלבד</p>
+                <p className="text-xs text-muted-foreground">4. תוחזר אוטומטית לאפליקציה</p>
               </div>
-              <div>
-                <Label>דומיין ראשי (אופציונלי)</Label>
-                <Input
-                  placeholder="example.onmicrosoft.com"
-                  className="mt-1.5"
-                  dir="ltr"
-                  value={form.domain}
-                  onChange={e => setForm(f => ({ ...f, domain: e.target.value }))}
-                />
-              </div>
-              <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
-                <h4 className="text-xs font-semibold text-blue-400 mb-2">הרשאות נדרשות (Read-Only)</h4>
-                <div className="text-xs text-muted-foreground space-y-1">
-                  <div>• Directory.Read.All</div>
-                  <div>• Policy.Read.All</div>
-                  <div>• SecurityEvents.Read.All</div>
-                  <div>• Reports.Read.All</div>
-                  <div>• SharePoint.Read.All</div>
-                  <div>• Exchange.ManageAsApp (Read)</div>
-                </div>
-              </div>
-              <Button className="w-full gap-2" onClick={handleAdd} disabled={saving || !form.tenant_name}>
-                <ExternalLink className="w-4 h-4" />
-                {saving ? 'שומר...' : 'התחל תהליך Consent'}
+
+              <Button
+                className="w-full gap-2"
+                onClick={handleConnect}
+                disabled={connecting || !tenantName.trim()}
+              >
+                {connecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Server className="w-4 h-4" />}
+                {connecting ? 'מעביר למיקרוסופט...' : 'התחבר עם Microsoft'}
               </Button>
             </div>
           </DialogContent>
         </Dialog>
       </div>
 
+      {/* Consent result banner */}
+      {consentResult && (
+        <div className={cn(
+          "flex items-center gap-3 p-4 rounded-xl border text-sm font-medium",
+          consentResult.success
+            ? "bg-green-500/10 border-green-500/30 text-green-400"
+            : "bg-red-500/10 border-red-500/30 text-red-400"
+        )}>
+          {consentResult.success
+            ? <><CheckCircle2 className="w-5 h-5 flex-shrink-0" />הטננט חובר בהצלחה! ניתן להפעיל סריקה.</>
+            : <><AlertCircle className="w-5 h-5 flex-shrink-0" />שגיאה בחיבור: {consentResult.error}</>
+          }
+          <button className="mr-auto text-xs opacity-60 hover:opacity-100" onClick={() => setConsentResult(null)}>✕</button>
+        </div>
+      )}
+
+      {/* Tenants list */}
       {loading ? (
         <div className="flex items-center justify-center h-40">
           <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -153,8 +175,7 @@ export default function Tenants() {
           <h3 className="text-base font-semibold text-foreground mb-2">אין טננטים מחוברים</h3>
           <p className="text-sm text-muted-foreground mb-6">חבר את הטננט הראשון שלך כדי להתחיל הערכת אבטחה</p>
           <Button className="gap-2" onClick={() => setShowAdd(true)}>
-            <Plus className="w-4 h-4" />
-            חבר טננט חדש
+            <Plus className="w-4 h-4" />חבר טננט חדש
           </Button>
         </div>
       ) : (
@@ -171,7 +192,7 @@ export default function Tenants() {
                     </div>
                     <div>
                       <h3 className="text-sm font-semibold text-foreground">{tenant.tenant_name}</h3>
-                      <p className="text-xs text-muted-foreground font-mono" dir="ltr">{tenant.domain || '—'}</p>
+                      <p className="text-[10px] text-muted-foreground font-mono" dir="ltr">{tenant.tenant_id || '—'}</p>
                     </div>
                   </div>
                   <DropdownMenu>
@@ -181,33 +202,26 @@ export default function Tenants() {
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem>הפעל סריקה</DropdownMenuItem>
-                      <DropdownMenuItem>צפה בדוחות</DropdownMenuItem>
-                      <DropdownMenuItem>חדש Consent</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleReConsent(tenant)}>חדש Consent</DropdownMenuItem>
                       <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(tenant.id)}>
-                        <Trash2 className="w-4 h-4 ml-2" />
-                        נתק טננט
+                        <Trash2 className="w-4 h-4 ml-2" />נתק טננט
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
                 <div className="flex items-center gap-2 mb-4">
                   <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium", statusCfg.cls)}>
-                    <StatusIcon className="w-3 h-3" />
-                    {statusCfg.label}
+                    <StatusIcon className="w-3 h-3" />{statusCfg.label}
                   </span>
                 </div>
                 <div className="grid grid-cols-3 gap-3 border-t border-border pt-4">
                   <div>
                     <div className="text-[10px] text-muted-foreground">ציון אחרון</div>
-                    <div className={cn(
-                      "text-lg font-bold",
+                    <div className={cn("text-lg font-bold",
                       tenant.last_scan_score >= 80 ? "text-green-400" :
                       tenant.last_scan_score >= 60 ? "text-amber-400" :
                       tenant.last_scan_score ? "text-red-400" : "text-muted-foreground"
-                    )}>
-                      {tenant.last_scan_score ?? '—'}
-                    </div>
+                    )}>{tenant.last_scan_score ?? '—'}</div>
                   </div>
                   <div>
                     <div className="text-[10px] text-muted-foreground">סריקות</div>
@@ -226,23 +240,20 @@ export default function Tenants() {
         </div>
       )}
 
+      {/* Permissions reference */}
       <div className="bg-card border border-border rounded-xl p-6">
-        <h3 className="text-sm font-semibold text-foreground mb-3">הרשאות Microsoft Graph API נדרשות</h3>
-        <p className="text-xs text-muted-foreground mb-4">
-          האפליקציה מבקשת הרשאות קריאה בלבד (Read-Only). אין גישה לכתיבה או שינוי הגדרות.
-        </p>
+        <h3 className="text-sm font-semibold text-foreground mb-1">הרשאות Microsoft Graph API נדרשות</h3>
+        <p className="text-xs text-muted-foreground mb-4">קריאה בלבד — אין גישה לכתיבה או שינוי הגדרות.</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {[
-            { perm: 'Directory.Read.All', desc: 'קריאת מבנה הספרייה, תפקידים ומשתמשים' },
-            { perm: 'Policy.Read.All', desc: 'קריאת מדיניות גישה מותנית ואבטחה' },
-            { perm: 'SecurityEvents.Read.All', desc: 'קריאת אירועי אבטחה וזיהוי סיכונים' },
-            { perm: 'Reports.Read.All', desc: 'קריאת דוחות שימוש ואבטחה' },
-            { perm: 'SharePoint.Read.All', desc: 'קריאת הגדרות SharePoint ושיתוף' },
-            { perm: 'RoleManagement.Read.Directory', desc: 'קריאת הקצאות תפקידים' },
-            { perm: 'MailboxSettings.Read', desc: 'קריאת הגדרות תיבות דואר' },
-            { perm: 'AuditLog.Read.All', desc: 'קריאת יומן ביקורת' },
+            { perm: 'Directory.Read.All', desc: 'מבנה ספרייה, תפקידים ומשתמשים' },
+            { perm: 'Policy.Read.All', desc: 'מדיניות גישה מותנית ואבטחה' },
+            { perm: 'SecurityEvents.Read.All', desc: 'אירועי אבטחה וסיכונים' },
+            { perm: 'Reports.Read.All', desc: 'דוחות שימוש ואבטחה' },
+            { perm: 'RoleManagement.Read.Directory', desc: 'הקצאות תפקידים' },
+            { perm: 'AuditLog.Read.All', desc: 'יומן ביקורת' },
           ].map(p => (
-            <div key={p.perm} className="flex items-start gap-2 p-2 rounded bg-secondary/30">
+            <div key={p.perm} className="flex items-center gap-2 p-2 rounded bg-secondary/30">
               <code className="text-[10px] font-mono text-primary bg-primary/10 px-1.5 py-0.5 rounded flex-shrink-0" dir="ltr">{p.perm}</code>
               <span className="text-xs text-muted-foreground">{p.desc}</span>
             </div>

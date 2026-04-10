@@ -5,22 +5,19 @@ Deno.serve(async (req) => {
   const user = await base44.auth.me();
   if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { customer_tenant_id, redirect_uri, tenant_record_id } = await req.json();
-
-  if (!customer_tenant_id) {
-    return Response.json({ error: 'customer_tenant_id is required' }, { status: 400 });
-  }
-
+  const { customer_tenant_id, redirect_uri } = await req.json();
   const clientId = Deno.env.get('AZURE_CLIENT_ID');
-  const baseRedirect = redirect_uri || `${req.headers.get('origin') || 'https://app.base44.com'}/tenants`;
-  
-  // State carries the tenant record ID so we can update it after consent
-  const state = encodeURIComponent(JSON.stringify({ tenant_record_id, user_id: user.id }));
 
-  const consentUrl = `https://login.microsoftonline.com/${customer_tenant_id}/adminconsent` +
+  if (!clientId) return Response.json({ error: 'AZURE_CLIENT_ID not configured' }, { status: 500 });
+
+  // Use 'common' to let Microsoft ask which tenant to authorize
+  const tenantPath = customer_tenant_id || 'common';
+  const redirectUri = redirect_uri || 'https://app.base44.com/tenants';
+
+  const consentUrl =
+    `https://login.microsoftonline.com/${tenantPath}/adminconsent` +
     `?client_id=${clientId}` +
-    `&redirect_uri=${encodeURIComponent(baseRedirect)}` +
-    `&state=${state}`;
+    `&redirect_uri=${encodeURIComponent(redirectUri)}`;
 
   return Response.json({ consent_url: consentUrl });
 });
