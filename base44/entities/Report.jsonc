@@ -1,0 +1,102 @@
+{
+  "name": "Report",
+  "type": "object",
+  "properties": {
+    "workspace_id": {
+      "type": "string"
+    },
+    "scan_job_id": {
+      "type": "string"
+    },
+    "tenant_id": {
+      "type": "string"
+    },
+    "tenant_name": {
+      "type": "string"
+    },
+    "report_type": {
+      "type": "string",
+      "enum": [
+        "executive_summary",
+        "technical_details",
+        "remediation_plan",
+        "full_report"
+      ],
+      "default": "full_report"
+    },
+    "title": {
+      "type": "string"
+    },
+    "scan_date": {
+      "type": "string"
+    },
+    "overall_score": {
+      "type": "number"
+    },
+    "benchmark_version": {
+      "type": "string"
+    },
+    "summary_he": {
+      "type": "string",
+      "description": "Executive summary in Hebrew"
+    },
+    "findings_by_severity": {
+      "type": "object",
+      "properties": {
+        "critical": {
+          "type": "number",
+          "default": 0
+        },
+        "high": {
+          "type": "number",
+          "default": 0
+        },
+        "medium": {
+          "type": "number",
+          "default": 0
+        },
+        "low": {
+          "type": "number",
+          "default": 0
+        },
+        "informational": {
+          "type": "number",
+          "default": 0
+        }
+      }
+    },
+    "findings_by_domain": {
+      "type": "object",
+      "description": "Count of findings per service domain"
+    },
+    "total_findings": {
+      "type": "number"
+    },
+    "passed_count": {
+      "type": "number"
+    },
+    "failed_count": {
+      "type": "number"
+    },
+    "compliance_percentage": {
+      "type": "number"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "generating",
+        "ready",
+        "error"
+      ],
+      "default": "generating"
+    },
+    "generated_by": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "scan_job_id",
+    "tenant_name"
+  ]
+}

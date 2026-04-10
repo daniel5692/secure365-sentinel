@@ -1,0 +1,85 @@
+{
+  "name": "Workspace",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Workspace/organization name"
+    },
+    "owner_email": {
+      "type": "string",
+      "description": "Email of the workspace owner"
+    },
+    "members": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "customer_admin",
+              "customer_reader",
+              "internal_analyst",
+              "platform_admin"
+            ]
+          },
+          "joined_date": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Workspace members with roles"
+    },
+    "plan": {
+      "type": "string",
+      "enum": [
+        "trial",
+        "starter",
+        "professional",
+        "enterprise"
+      ],
+      "default": "trial"
+    },
+    "scan_quota": {
+      "type": "number",
+      "default": 10
+    },
+    "scans_used": {
+      "type": "number",
+      "default": 0
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "suspended",
+        "archived"
+      ],
+      "default": "active"
+    },
+    "settings": {
+      "type": "object",
+      "properties": {
+        "notifications_enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "auto_scan_enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "scan_schedule": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "required": [
+    "name",
+    "owner_email"
+  ]
+}

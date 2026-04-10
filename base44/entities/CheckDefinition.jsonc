@@ -1,0 +1,117 @@
+{
+  "name": "CheckDefinition",
+  "type": "object",
+  "properties": {
+    "check_id": {
+      "type": "string",
+      "description": "Unique check identifier e.g. CIS-1.1.1"
+    },
+    "title": {
+      "type": "string",
+      "description": "English check title from CIS benchmark"
+    },
+    "title_he": {
+      "type": "string",
+      "description": "Hebrew title/summary"
+    },
+    "description_he": {
+      "type": "string",
+      "description": "Hebrew explanation of what this check validates"
+    },
+    "category": {
+      "type": "string",
+      "description": "Benchmark section/category"
+    },
+    "domain": {
+      "type": "string",
+      "enum": [
+        "entra_id",
+        "conditional_access",
+        "exchange_online",
+        "defender",
+        "sharepoint",
+        "onedrive",
+        "teams",
+        "purview",
+        "external_sharing",
+        "mail_flow",
+        "secure_score",
+        "information_protection"
+      ],
+      "description": "Service domain area"
+    },
+    "severity": {
+      "type": "string",
+      "enum": [
+        "critical",
+        "high",
+        "medium",
+        "low",
+        "informational"
+      ]
+    },
+    "benchmark_ref": {
+      "type": "string",
+      "description": "CIS Benchmark reference number"
+    },
+    "benchmark_version": {
+      "type": "string",
+      "default": "CIS Microsoft 365 v3.1.0"
+    },
+    "framework": {
+      "type": "string",
+      "enum": [
+        "cis_m365",
+        "custom",
+        "microsoft_best_practices"
+      ],
+      "default": "cis_m365"
+    },
+    "expected_state": {
+      "type": "string",
+      "description": "What the correct/secure configuration should be"
+    },
+    "validation_method_he": {
+      "type": "string",
+      "description": "Hebrew description of how this check is validated"
+    },
+    "remediation_he": {
+      "type": "string",
+      "description": "Hebrew remediation steps"
+    },
+    "why_it_matters_he": {
+      "type": "string",
+      "description": "Hebrew explanation of risk/impact"
+    },
+    "manual_verification_note_he": {
+      "type": "string",
+      "description": "Hebrew note for manual verification if needed"
+    },
+    "graph_api_endpoint": {
+      "type": "string",
+      "description": "Microsoft Graph API endpoint used"
+    },
+    "required_permissions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Graph API permissions needed for this check"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    },
+    "is_automated": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this check can run automatically or requires manual verification"
+    }
+  },
+  "required": [
+    "check_id",
+    "title",
+    "domain",
+    "severity"
+  ]
+}

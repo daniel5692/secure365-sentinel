@@ -1,0 +1,164 @@
+import { Settings as SettingsIcon, Bell, Shield, Users, Clock, Key } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { DEMO_WORKSPACE } from "@/lib/demoData";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+export default function Settings() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-foreground">הגדרות</h1>
+        <p className="text-sm text-muted-foreground mt-1">ניהול הגדרות הארגון וסביבת העבודה</p>
+      </div>
+
+      <Tabs defaultValue="workspace" className="space-y-6">
+        <TabsList className="bg-secondary">
+          <TabsTrigger value="workspace">סביבת עבודה</TabsTrigger>
+          <TabsTrigger value="notifications">התראות</TabsTrigger>
+          <TabsTrigger value="scanning">סריקה</TabsTrigger>
+          <TabsTrigger value="members">חברי צוות</TabsTrigger>
+          <TabsTrigger value="security">אבטחה</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="workspace">
+          <div className="bg-card border border-border rounded-xl p-6 space-y-6">
+            <h3 className="text-sm font-semibold text-foreground">פרטי סביבת העבודה</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <Label>שם הארגון</Label>
+                <Input defaultValue={DEMO_WORKSPACE.name} className="mt-1.5" />
+              </div>
+              <div>
+                <Label>מנוי</Label>
+                <div className="mt-1.5 flex items-center gap-3">
+                  <span className="px-3 py-2 bg-primary/10 text-primary text-sm font-medium rounded-lg border border-primary/20">
+                    Professional
+                  </span>
+                  <Button variant="outline" size="sm">שדרג מנוי</Button>
+                </div>
+              </div>
+              <div>
+                <Label>מכסת סריקות</Label>
+                <div className="mt-1.5 flex items-center gap-3">
+                  <span className="text-sm text-foreground">{DEMO_WORKSPACE.scans_used} / {DEMO_WORKSPACE.scan_quota}</span>
+                  <div className="flex-1 h-2 bg-secondary rounded-full overflow-hidden">
+                    <div className="h-full bg-primary rounded-full" style={{ width: `${(DEMO_WORKSPACE.scans_used / DEMO_WORKSPACE.scan_quota) * 100}%` }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+            <Button>שמור שינויים</Button>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="notifications">
+          <div className="bg-card border border-border rounded-xl p-6 space-y-5">
+            <h3 className="text-sm font-semibold text-foreground">הגדרות התראות</h3>
+            {[
+              { label: 'סריקה הושלמה', desc: 'קבל התראה כאשר סריקה מסתיימת' },
+              { label: 'ממצא קריטי חדש', desc: 'התראה על ממצאים ברמת חומרה קריטית' },
+              { label: 'ירידה בציון', desc: 'התראה כאשר ציון האבטחה יורד' },
+              { label: 'דוח מוכן', desc: 'התראה כאשר דוח מוכן לצפייה' },
+              { label: 'ניתוק טננט', desc: 'התראה כאשר חיבור לטננט נכשל' },
+            ].map(item => (
+              <div key={item.label} className="flex items-center justify-between py-3 border-b border-border last:border-0">
+                <div>
+                  <div className="text-sm font-medium text-foreground">{item.label}</div>
+                  <div className="text-xs text-muted-foreground">{item.desc}</div>
+                </div>
+                <Switch defaultChecked />
+              </div>
+            ))}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="scanning">
+          <div className="bg-card border border-border rounded-xl p-6 space-y-5">
+            <h3 className="text-sm font-semibold text-foreground">הגדרות סריקה</h3>
+            <div className="flex items-center justify-between py-3 border-b border-border">
+              <div>
+                <div className="text-sm font-medium text-foreground">סריקות אוטומטיות</div>
+                <div className="text-xs text-muted-foreground">הפעל סריקות מתוזמנות באופן אוטומטי</div>
+              </div>
+              <Switch />
+            </div>
+            <div>
+              <Label>תדירות סריקה אוטומטית</Label>
+              <select className="mt-1.5 w-full bg-secondary border border-border rounded-lg p-2 text-sm text-foreground">
+                <option>שבועי</option>
+                <option>דו-שבועי</option>
+                <option>חודשי</option>
+              </select>
+            </div>
+            <div>
+              <Label>Benchmark ברירת מחדל</Label>
+              <div className="mt-1.5 px-3 py-2 bg-secondary rounded-lg text-sm text-foreground">
+                CIS Microsoft 365 Foundations Benchmark v3.1.0
+              </div>
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="members">
+          <div className="bg-card border border-border rounded-xl p-6 space-y-5">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-foreground">חברי צוות</h3>
+              <Button size="sm" className="gap-1.5">
+                <Users className="w-3.5 h-3.5" />
+                הזמן חבר
+              </Button>
+            </div>
+            <div className="divide-y divide-border">
+              {DEMO_WORKSPACE.members.map(member => (
+                <div key={member.email} className="flex items-center justify-between py-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+                      <span className="text-[10px] font-bold text-primary">{member.email[0].toUpperCase()}</span>
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-foreground">{member.email}</div>
+                      <div className="text-xs text-muted-foreground">הצטרף: {new Date(member.joined_date).toLocaleDateString('he-IL')}</div>
+                    </div>
+                  </div>
+                  <span className="px-2.5 py-1 bg-primary/10 text-primary text-xs font-medium rounded-md border border-primary/20">
+                    {member.role === 'customer_admin' ? 'מנהל' : member.role === 'customer_reader' ? 'צופה' : member.role}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="security">
+          <div className="bg-card border border-border rounded-xl p-6 space-y-5">
+            <h3 className="text-sm font-semibold text-foreground">אבטחת חשבון</h3>
+            <div className="flex items-center justify-between py-3 border-b border-border">
+              <div>
+                <div className="text-sm font-medium text-foreground">אימות דו-שלבי (MFA)</div>
+                <div className="text-xs text-muted-foreground">חייב אימות דו-שלבי לכל חברי הצוות</div>
+              </div>
+              <Switch defaultChecked />
+            </div>
+            <div className="flex items-center justify-between py-3 border-b border-border">
+              <div>
+                <div className="text-sm font-medium text-foreground">יומן פעילות</div>
+                <div className="text-xs text-muted-foreground">תיעוד כל הפעולות בסביבת העבודה</div>
+              </div>
+              <Switch defaultChecked />
+            </div>
+            <div className="flex items-center justify-between py-3">
+              <div>
+                <div className="text-sm font-medium text-foreground">הגבלת כתובות IP</div>
+                <div className="text-xs text-muted-foreground">הגבל גישה לכתובות IP ספציפיות בלבד</div>
+              </div>
+              <Switch />
+            </div>
+          </div>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}

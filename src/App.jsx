@@ -5,6 +5,16 @@ import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
+import AppLayout from './components/layout/AppLayout';
+import Dashboard from './pages/Dashboard';
+import Tenants from './pages/Tenants';
+import Scans from './pages/Scans';
+import Findings from './pages/Findings';
+import Compliance from './pages/Compliance';
+import Reports from './pages/Reports';
+import History from './pages/History';
+import Settings from './pages/Settings';
+import Admin from './pages/Admin';
 // Add page imports here
 
 const AuthenticatedApp = () => {
@@ -33,8 +43,18 @@ const AuthenticatedApp = () => {
   // Render the main app
   return (
     <Routes>
-      {/* Add your page Route elements here */}
-      <Route path="*" element={<PageNotFound />} />
+      <Route element={<AppLayout />}>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/tenants" element={<Tenants />} />
+        <Route path="/scans" element={<Scans />} />
+        <Route path="/findings" element={<Findings />} />
+        <Route path="/compliance" element={<Compliance />} />
+        <Route path="/reports" element={<Reports />} />
+        <Route path="/history" element={<History />} />
+        <Route path="/settings" element={<Settings />} />
+        <Route path="/admin" element={<Admin />} />
+        <Route path="*" element={<PageNotFound />} />
+      </Route>
     </Routes>
   );
 };

@@ -1,0 +1,62 @@
+{
+  "name": "ConnectedTenant",
+  "type": "object",
+  "properties": {
+    "workspace_id": {
+      "type": "string",
+      "description": "Reference to workspace"
+    },
+    "tenant_id": {
+      "type": "string",
+      "description": "Microsoft 365 Tenant ID (GUID)"
+    },
+    "tenant_name": {
+      "type": "string",
+      "description": "Display name for the tenant"
+    },
+    "domain": {
+      "type": "string",
+      "description": "Primary domain of the tenant"
+    },
+    "connection_status": {
+      "type": "string",
+      "enum": [
+        "connected",
+        "disconnected",
+        "error",
+        "pending_consent"
+      ],
+      "default": "pending_consent"
+    },
+    "consent_date": {
+      "type": "string",
+      "description": "Date consent was granted"
+    },
+    "last_scan_date": {
+      "type": "string",
+      "description": "Date of last completed scan"
+    },
+    "last_scan_score": {
+      "type": "number",
+      "description": "Overall score from last scan (0-100)"
+    },
+    "total_scans": {
+      "type": "number",
+      "default": 0
+    },
+    "permissions_granted": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of Graph API permissions granted"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "tenant_name"
+  ]
+}

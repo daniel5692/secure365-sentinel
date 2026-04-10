@@ -1,0 +1,109 @@
+{
+  "name": "ScanJob",
+  "type": "object",
+  "properties": {
+    "workspace_id": {
+      "type": "string"
+    },
+    "tenant_id": {
+      "type": "string",
+      "description": "ConnectedTenant record ID"
+    },
+    "tenant_name": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "running",
+        "completed",
+        "failed",
+        "cancelled"
+      ],
+      "default": "queued"
+    },
+    "progress": {
+      "type": "number",
+      "default": 0,
+      "description": "0-100 progress percentage"
+    },
+    "total_checks": {
+      "type": "number",
+      "default": 0
+    },
+    "completed_checks": {
+      "type": "number",
+      "default": 0
+    },
+    "benchmark_version": {
+      "type": "string",
+      "default": "CIS Microsoft 365 v3.1.0"
+    },
+    "framework": {
+      "type": "string",
+      "enum": [
+        "cis_m365",
+        "custom",
+        "microsoft_best_practices"
+      ],
+      "default": "cis_m365"
+    },
+    "started_at": {
+      "type": "string"
+    },
+    "completed_at": {
+      "type": "string"
+    },
+    "overall_score": {
+      "type": "number",
+      "description": "Compliance score 0-100"
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "passed": {
+          "type": "number",
+          "default": 0
+        },
+        "failed": {
+          "type": "number",
+          "default": 0
+        },
+        "warning": {
+          "type": "number",
+          "default": 0
+        },
+        "manual": {
+          "type": "number",
+          "default": 0
+        },
+        "not_applicable": {
+          "type": "number",
+          "default": 0
+        },
+        "error": {
+          "type": "number",
+          "default": 0
+        }
+      }
+    },
+    "domains_scanned": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "error_message": {
+      "type": "string"
+    },
+    "triggered_by": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "tenant_id",
+    "tenant_name"
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "name": "AuditLog",
+  "type": "object",
+  "properties": {
+    "workspace_id": {
+      "type": "string"
+    },
+    "user_email": {
+      "type": "string"
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "login",
+        "tenant_connected",
+        "tenant_disconnected",
+        "scan_started",
+        "scan_completed",
+        "scan_failed",
+        "report_generated",
+        "report_exported",
+        "settings_changed",
+        "member_added",
+        "member_removed",
+        "workspace_created",
+        "tenant_consent_granted",
+        "check_retried"
+      ],
+      "description": "Type of audited action"
+    },
+    "resource_type": {
+      "type": "string",
+      "enum": [
+        "workspace",
+        "tenant",
+        "scan",
+        "report",
+        "settings",
+        "member",
+        "check"
+      ]
+    },
+    "resource_id": {
+      "type": "string"
+    },
+    "details": {
+      "type": "string",
+      "description": "Human-readable description of the action"
+    },
+    "ip_address": {
+      "type": "string"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Additional contextual data"
+    }
+  },
+  "required": [
+    "action",
+    "user_email"
+  ]
+}
