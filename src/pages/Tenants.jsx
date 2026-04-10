@@ -1,16 +1,13 @@
-import { Server, Plus, MoreVertical, ExternalLink, Wifi, WifiOff, Clock, Trash2 } from "lucide-react";
+import { Server, Plus, MoreVertical, ExternalLink, Wifi, WifiOff, Clock, Trash2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DEMO_TENANTS } from "@/lib/demoData";
 import { cn } from "@/lib/utils";
-import { 
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger 
-} from "@/components/ui/dropdown-menu";
-import { 
-  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger 
-} from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { base44 } from "@/api/base44Client";
+import { useAuth } from "@/lib/AuthContext";
 
 const STATUS_CONFIG = {
   connected: { label: 'מחובר', cls: 'text-green-400 bg-green-500/10 border-green-500/30', icon: Wifi },
@@ -20,7 +17,42 @@ const STATUS_CONFIG = {
 };
 
 export default function Tenants() {
+  const { user } = useAuth();
+  const [tenants, setTenants] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState({ tenant_name: '', domain: '' });
+  const [saving, setSaving] = useState(false);
+
+  const loadTenants = async () => {
+    setLoading(true);
+    const data = await base44.entities.ConnectedTenant.list('-created_date');
+    setTenants(data);
+    setLoading(false);
+  };
+
+  useEffect(() => { loadTenants(); }, []);
+
+  const handleAdd = async () => {
+    if (!form.tenant_name) return;
+    setSaving(true);
+    await base44.entities.ConnectedTenant.create({
+      tenant_name: form.tenant_name,
+      domain: form.domain,
+      workspace_id: user?.id || 'default',
+      connection_status: 'pending_consent',
+      total_scans: 0,
+    });
+    setForm({ tenant_name: '', domain: '' });
+    setShowAdd(false);
+    setSaving(false);
+    loadTenants();
+  };
+
+  const handleDelete = async (id) => {
+    await base44.entities.ConnectedTenant.delete(id);
+    loadTenants();
+  };
 
   return (
     <div className="space-y-6">
@@ -46,11 +78,22 @@ export default function Tenants() {
             <div className="space-y-4 mt-4">
               <div>
                 <Label>שם הטננט</Label>
-                <Input placeholder="לדוגמה: Production Environment" className="mt-1.5" />
+                <Input
+                  placeholder="לדוגמה: Production Environment"
+                  className="mt-1.5"
+                  value={form.tenant_name}
+                  onChange={e => setForm(f => ({ ...f, tenant_name: e.target.value }))}
+                />
               </div>
               <div>
                 <Label>דומיין ראשי</Label>
-                <Input placeholder="example.onmicrosoft.com" className="mt-1.5" dir="ltr" />
+                <Input
+                  placeholder="example.onmicrosoft.com"
+                  className="mt-1.5"
+                  dir="ltr"
+                  value={form.domain}
+                  onChange={e => setForm(f => ({ ...f, domain: e.target.value }))}
+                />
               </div>
               <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
                 <h4 className="text-xs font-semibold text-blue-400 mb-2">הרשאות נדרשות (Read-Only)</h4>
@@ -63,92 +106,104 @@ export default function Tenants() {
                   <div>• Exchange.ManageAsApp (Read)</div>
                 </div>
               </div>
-              <Button className="w-full gap-2" onClick={() => setShowAdd(false)}>
+              <Button className="w-full gap-2" onClick={handleAdd} disabled={saving || !form.tenant_name}>
                 <ExternalLink className="w-4 h-4" />
-                התחל תהליך Consent
+                {saving ? 'שומר...' : 'התחל תהליך Consent'}
               </Button>
             </div>
           </DialogContent>
         </Dialog>
       </div>
 
-      {/* Tenants Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {DEMO_TENANTS.map(tenant => {
-          const statusCfg = STATUS_CONFIG[tenant.connection_status];
-          const StatusIcon = statusCfg.icon;
-          return (
-            <div key={tenant.id} className="bg-card border border-border rounded-xl p-5 hover:border-primary/30 transition-all">
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <Server className="w-5 h-5 text-primary" />
+      {loading ? (
+        <div className="flex items-center justify-center h-40">
+          <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : tenants.length === 0 ? (
+        <div className="bg-card border border-border rounded-xl p-12 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+            <Server className="w-8 h-8 text-primary" />
+          </div>
+          <h3 className="text-base font-semibold text-foreground mb-2">אין טננטים מחוברים</h3>
+          <p className="text-sm text-muted-foreground mb-6">חבר את הטננט הראשון שלך כדי להתחיל הערכת אבטחה</p>
+          <Button className="gap-2" onClick={() => setShowAdd(true)}>
+            <Plus className="w-4 h-4" />
+            חבר טננט חדש
+          </Button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {tenants.map(tenant => {
+            const statusCfg = STATUS_CONFIG[tenant.connection_status] || STATUS_CONFIG.pending_consent;
+            const StatusIcon = statusCfg.icon;
+            return (
+              <div key={tenant.id} className="bg-card border border-border rounded-xl p-5 hover:border-primary/30 transition-all">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Server className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground">{tenant.tenant_name}</h3>
+                      <p className="text-xs text-muted-foreground font-mono" dir="ltr">{tenant.domain || '—'}</p>
+                    </div>
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="p-1 hover:bg-secondary rounded">
+                        <MoreVertical className="w-4 h-4 text-muted-foreground" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem>הפעל סריקה</DropdownMenuItem>
+                      <DropdownMenuItem>צפה בדוחות</DropdownMenuItem>
+                      <DropdownMenuItem>חדש Consent</DropdownMenuItem>
+                      <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(tenant.id)}>
+                        <Trash2 className="w-4 h-4 ml-2" />
+                        נתק טננט
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+                <div className="flex items-center gap-2 mb-4">
+                  <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium", statusCfg.cls)}>
+                    <StatusIcon className="w-3 h-3" />
+                    {statusCfg.label}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-3 border-t border-border pt-4">
+                  <div>
+                    <div className="text-[10px] text-muted-foreground">ציון אחרון</div>
+                    <div className={cn(
+                      "text-lg font-bold",
+                      tenant.last_scan_score >= 80 ? "text-green-400" :
+                      tenant.last_scan_score >= 60 ? "text-amber-400" :
+                      tenant.last_scan_score ? "text-red-400" : "text-muted-foreground"
+                    )}>
+                      {tenant.last_scan_score ?? '—'}
+                    </div>
                   </div>
                   <div>
-                    <h3 className="text-sm font-semibold text-foreground">{tenant.tenant_name}</h3>
-                    <p className="text-xs text-muted-foreground font-mono" dir="ltr">{tenant.domain}</p>
+                    <div className="text-[10px] text-muted-foreground">סריקות</div>
+                    <div className="text-lg font-bold text-foreground">{tenant.total_scans || 0}</div>
                   </div>
-                </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button className="p-1 hover:bg-secondary rounded">
-                      <MoreVertical className="w-4 h-4 text-muted-foreground" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem>הפעל סריקה</DropdownMenuItem>
-                    <DropdownMenuItem>צפה בדוחות</DropdownMenuItem>
-                    <DropdownMenuItem>חדש Consent</DropdownMenuItem>
-                    <DropdownMenuItem className="text-destructive">
-                      <Trash2 className="w-4 h-4 ml-2" />
-                      נתק טננט
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-
-              {/* Status Badge */}
-              <div className="flex items-center gap-2 mb-4">
-                <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium", statusCfg.cls)}>
-                  <StatusIcon className="w-3 h-3" />
-                  {statusCfg.label}
-                </span>
-              </div>
-
-              {/* Stats */}
-              <div className="grid grid-cols-3 gap-3 border-t border-border pt-4">
-                <div>
-                  <div className="text-[10px] text-muted-foreground">ציון אחרון</div>
-                  <div className={cn(
-                    "text-lg font-bold",
-                    tenant.last_scan_score >= 80 ? "text-green-400" :
-                    tenant.last_scan_score >= 60 ? "text-amber-400" :
-                    tenant.last_scan_score ? "text-red-400" : "text-muted-foreground"
-                  )}>
-                    {tenant.last_scan_score ?? '—'}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[10px] text-muted-foreground">סריקות</div>
-                  <div className="text-lg font-bold text-foreground">{tenant.total_scans}</div>
-                </div>
-                <div>
-                  <div className="text-[10px] text-muted-foreground">סריקה אחרונה</div>
-                  <div className="text-xs text-foreground mt-1">
-                    {tenant.last_scan_date ? new Date(tenant.last_scan_date).toLocaleDateString('he-IL') : '—'}
+                  <div>
+                    <div className="text-[10px] text-muted-foreground">סריקה אחרונה</div>
+                    <div className="text-xs text-foreground mt-1">
+                      {tenant.last_scan_date ? new Date(tenant.last_scan_date).toLocaleDateString('he-IL') : '—'}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
-      {/* Required Permissions Info */}
       <div className="bg-card border border-border rounded-xl p-6">
         <h3 className="text-sm font-semibold text-foreground mb-3">הרשאות Microsoft Graph API נדרשות</h3>
         <p className="text-xs text-muted-foreground mb-4">
-          האפליקציה מבקשת הרשאות קריאה בלבד (Read-Only) כדי להעריך את מצב האבטחה של הטננט. אין גישה לכתיבה או שינוי הגדרות.
+          האפליקציה מבקשת הרשאות קריאה בלבד (Read-Only). אין גישה לכתיבה או שינוי הגדרות.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {[
@@ -159,7 +214,7 @@ export default function Tenants() {
             { perm: 'SharePoint.Read.All', desc: 'קריאת הגדרות SharePoint ושיתוף' },
             { perm: 'RoleManagement.Read.Directory', desc: 'קריאת הקצאות תפקידים' },
             { perm: 'MailboxSettings.Read', desc: 'קריאת הגדרות תיבות דואר' },
-            { perm: 'InformationProtectionPolicy.Read.All', desc: 'קריאת מדיניות הגנת מידע' },
+            { perm: 'AuditLog.Read.All', desc: 'קריאת יומן ביקורת' },
           ].map(p => (
             <div key={p.perm} className="flex items-start gap-2 p-2 rounded bg-secondary/30">
               <code className="text-[10px] font-mono text-primary bg-primary/10 px-1.5 py-0.5 rounded flex-shrink-0" dir="ltr">{p.perm}</code>

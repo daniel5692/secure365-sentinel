@@ -1,29 +1,79 @@
-import { Shield, AlertTriangle, CheckCircle2, Server, Scan } from "lucide-react";
+import { Shield, AlertTriangle, CheckCircle2, Server, Scan, Plus } from "lucide-react";
 import StatCard from "@/components/shared/StatCard";
 import ScoreRing from "@/components/shared/ScoreRing";
 import DomainBreakdown from "@/components/dashboard/DomainBreakdown";
-import FindingsSummaryChart from "@/components/dashboard/FindingsSummaryChart";
-import TrendChart from "@/components/dashboard/TrendChart";
 import RecentScans from "@/components/dashboard/RecentScans";
-import { DEMO_WORKSPACE, DEMO_TENANTS, DEMO_SCANS, DEMO_RESULTS } from "@/lib/demoData";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { base44 } from "@/api/base44Client";
 
 export default function Dashboard() {
-  const latestScan = DEMO_SCANS[0];
-  const failedResults = DEMO_RESULTS.filter(r => r.status === 'failed');
+  const [tenants, setTenants] = useState([]);
+  const [scans, setScans] = useState([]);
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([
+      base44.entities.ConnectedTenant.list(),
+      base44.entities.ScanJob.list('-created_date', 10),
+      base44.entities.CheckResult.list('-created_date', 100),
+    ]).then(([t, s, r]) => {
+      setTenants(t);
+      setScans(s);
+      setResults(r);
+      setLoading(false);
+    });
+  }, []);
+
+  const latestScan = scans[0];
+  const failedResults = results.filter(r => r.status === 'failed');
   const criticalFailed = failedResults.filter(r => r.severity === 'critical');
-  const connectedTenants = DEMO_TENANTS.filter(t => t.connection_status === 'connected');
+  const connectedTenants = tenants.filter(t => t.connection_status === 'connected');
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // Empty state - no tenants yet
+  if (tenants.length === 0) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">דשבורד אבטחה</h1>
+          <p className="text-sm text-muted-foreground mt-1">סקירה כללית של מצב האבטחה בסביבות Microsoft 365</p>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-16 text-center">
+          <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-5">
+            <Shield className="w-10 h-10 text-primary" />
+          </div>
+          <h3 className="text-xl font-semibold text-foreground mb-2">ברוכים הבאים!</h3>
+          <p className="text-sm text-muted-foreground mb-2 max-w-md mx-auto">
+            כדי להתחיל, חבר את הטננט הראשון שלך ב-Microsoft 365 והפעל סריקת אבטחה.
+          </p>
+          <p className="text-xs text-muted-foreground mb-8">הסריקה מבוססת על CIS Microsoft 365 Foundations Benchmark v3.1.0 ודורשת הרשאות קריאה בלבד.</p>
+          <Link to="/tenants">
+            <Button className="gap-2 px-8">
+              <Plus className="w-4 h-4" />
+              חבר טננט ראשון
+            </Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">דשבורד אבטחה</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            סקירה כללית של מצב האבטחה בסביבות Microsoft 365
-          </p>
+          <p className="text-sm text-muted-foreground mt-1">סקירה כללית של מצב האבטחה בסביבות Microsoft 365</p>
         </div>
         <Link to="/scans">
           <Button className="gap-2">
@@ -33,74 +83,31 @@ export default function Dashboard() {
         </Link>
       </div>
 
-      {/* Score + Stats Row */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Main Score Card */}
         <div className="lg:col-span-4 bg-card border border-border rounded-xl p-6 flex items-center gap-6">
           <ScoreRing score={latestScan?.overall_score || 0} size={130} />
           <div>
             <h2 className="text-sm font-medium text-muted-foreground mb-1">ציון אבטחה כולל</h2>
-            <p className="text-lg font-bold text-foreground">{latestScan?.tenant_name}</p>
+            <p className="text-lg font-bold text-foreground">{latestScan?.tenant_name || '—'}</p>
             <p className="text-xs text-muted-foreground mt-1">
-              סריקה אחרונה: {latestScan?.completed_at ? new Date(latestScan.completed_at).toLocaleDateString('he-IL') : 'לא זמין'}
+              {latestScan?.completed_at ? `סריקה אחרונה: ${new Date(latestScan.completed_at).toLocaleDateString('he-IL')}` : 'טרם בוצעה סריקה'}
             </p>
-            <div className="flex items-center gap-1 mt-2">
-              <span className="text-xs text-green-400 font-medium">↑ +7</span>
-              <span className="text-xs text-muted-foreground">מהסריקה הקודמת</span>
-            </div>
           </div>
         </div>
 
-        {/* Stats Grid */}
         <div className="lg:col-span-8 grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard
-            title="טננטים מחוברים"
-            value={connectedTenants.length}
-            subtitle={`מתוך ${DEMO_TENANTS.length}`}
-            icon={Server}
-            variant="info"
-          />
-          <StatCard
-            title="בדיקות שעברו"
-            value={latestScan?.summary?.passed || 0}
-            subtitle={`מתוך ${latestScan?.total_checks || 0}`}
-            icon={CheckCircle2}
-            variant="success"
-          />
-          <StatCard
-            title="ממצאים שנכשלו"
-            value={failedResults.length}
-            subtitle="דורשים טיפול"
-            icon={AlertTriangle}
-            variant="danger"
-          />
-          <StatCard
-            title="ממצאים קריטיים"
-            value={criticalFailed.length}
-            subtitle="עדיפות גבוהה"
-            icon={Shield}
-            variant="danger"
-          />
+          <StatCard title="טננטים מחוברים" value={connectedTenants.length} subtitle={`מתוך ${tenants.length}`} icon={Server} variant="info" />
+          <StatCard title="בדיקות שעברו" value={latestScan?.summary?.passed || 0} subtitle={`מתוך ${latestScan?.total_checks || 0}`} icon={CheckCircle2} variant="success" />
+          <StatCard title="ממצאים שנכשלו" value={failedResults.length} subtitle="דורשים טיפול" icon={AlertTriangle} variant="danger" />
+          <StatCard title="ממצאים קריטיים" value={criticalFailed.length} subtitle="עדיפות גבוהה" icon={Shield} variant="danger" />
         </div>
       </div>
 
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-8">
-          <TrendChart />
-        </div>
-        <div className="lg:col-span-4">
-          <FindingsSummaryChart />
-        </div>
-      </div>
-
-      {/* Bottom Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <DomainBreakdown />
-        <RecentScans />
+        <DomainBreakdown results={results} />
+        <RecentScans scans={scans} />
       </div>
 
-      {/* Critical Findings Alert */}
       {criticalFailed.length > 0 && (
         <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-5">
           <div className="flex items-center gap-3 mb-3">
@@ -109,15 +116,14 @@ export default function Dashboard() {
             </div>
             <div>
               <h3 className="text-sm font-semibold text-red-400">ממצאים קריטיים הדורשים טיפול מיידי</h3>
-              <p className="text-xs text-muted-foreground">נמצאו {criticalFailed.length} ממצאים קריטיים בסריקה האחרונה</p>
+              <p className="text-xs text-muted-foreground">נמצאו {criticalFailed.length} ממצאים קריטיים</p>
             </div>
           </div>
           <div className="space-y-2">
-            {criticalFailed.map(f => (
+            {criticalFailed.slice(0, 5).map(f => (
               <Link key={f.id} to={`/findings?check=${f.check_id}`} className="flex items-center gap-3 p-3 rounded-lg bg-red-500/5 hover:bg-red-500/10 transition-colors">
                 <span className="text-xs font-mono text-red-400">{f.check_id}</span>
                 <span className="text-xs text-foreground">{f.check_title}</span>
-                <span className="text-[10px] text-muted-foreground mr-auto">{f.explanation_he}</span>
               </Link>
             ))}
           </div>
