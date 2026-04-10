@@ -68,15 +68,17 @@ export default function Tenants() {
     if (!tenantName.trim()) return;
     setConnecting(true);
     localStorage.setItem('pending_tenant_name', tenantName.trim());
-    // Get consent URL from backend (keeps CLIENT_ID secret-side)
     const res = await base44.functions.invoke('generateConsentUrl', {
-      customer_tenant_id: 'common', // /common = Microsoft asks which tenant
+      customer_tenant_id: 'common',
       redirect_uri: window.location.origin + '/tenants',
     });
-    if (res.data?.consent_url) {
-      window.location.href = res.data.consent_url; // same tab redirect
+    const url = res?.data?.consent_url;
+    if (url) {
+      // Direct navigation to Microsoft login
+      window.location.assign(url);
     } else {
       setConnecting(false);
+      alert('שגיאה ביצירת קישור ההתחברות');
     }
   };
 
@@ -110,7 +112,7 @@ export default function Tenants() {
           </DialogTrigger>
           <DialogContent className="sm:max-w-md" dir="rtl">
             <DialogHeader>
-              <DialogTitle>חיבור טננט Microsoft 365</DialogTitle>
+              <DialogTitle>חיבור Microsoft 365 Tenant</DialogTitle>
             </DialogHeader>
             <div className="space-y-5 mt-2">
               <div>
@@ -134,12 +136,12 @@ export default function Tenants() {
               </div>
 
               <Button
-                className="w-full gap-2"
+                className="w-full gap-2 text-base py-5"
                 onClick={handleConnect}
                 disabled={connecting || !tenantName.trim()}
               >
                 {connecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Server className="w-4 h-4" />}
-                {connecting ? 'מעביר למיקרוסופט...' : 'התחבר עם Microsoft'}
+                {connecting ? 'מעביר למיקרוסופט...' : 'חבר Microsoft 365 Tenant'}
               </Button>
             </div>
           </DialogContent>
