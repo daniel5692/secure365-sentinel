@@ -1,83 +1,42 @@
 import { registerCheck } from '../checkRegistry';
 
-// ==========================================
-// Conditional Access Security Checks
-// Based on CIS Microsoft 365 Foundations Benchmark v3.1.0
-// ==========================================
+// CIS Microsoft 365 Foundations Benchmark v6.0.1 - Section 2: Conditional Access
 
 registerCheck({
   id: 'CIS-2.1.1',
-  title: 'Ensure Conditional Access policies target all cloud applications',
-  titleHe: 'ודא שמדיניות גישה מותנית מכסה את כל אפליקציות הענן',
-  descriptionHe: 'מדיניות גישה מותנית צריכה לכסות את כל האפליקציות ולא רק חלק מהן, כדי למנוע עקיפת הגנות.',
-  category: 'Conditional Access',
-  domain: 'conditional_access',
-  severity: 'high',
-  benchmarkRef: 'CIS 2.1.1',
-  benchmarkVersion: 'CIS Microsoft 365 v3.1.0',
-  framework: 'cis_m365',
-  expectedState: 'At least one Conditional Access policy targets All cloud apps',
-  validationMethodHe: 'בדיקת מדיניות Conditional Access שמכסות All cloud apps',
-  remediationHe: `1. היכנס ל-Microsoft Entra admin center
-2. נווט אל Protection > Conditional Access
-3. ודא שקיימת מדיניות שמכסה All cloud apps
-4. ודא שהמדיניות דורשת MFA או תנאים מחמירים
-5. בדוק שאין פערי כיסוי`,
-  whyItMattersHe: 'מדיניות שמכסה רק חלק מהאפליקציות מאפשרת לתוקפים לגשת לאפליקציות לא מוגנות ולבצע תנועה רוחבית.',
-  manualVerificationNoteHe: null,
-  graphApiEndpoint: '/identity/conditionalAccess/policies',
-  requiredPermissions: ['Policy.Read.All'],
-  isAutomated: true,
+  title: 'Ensure Conditional Access covers all cloud apps',
+  titleHe: 'ודא שגישה מותנית מכסה את כל אפליקציות הענן',
+  descriptionHe: 'מדיניות CA חייבת לכסות All cloud apps כדי שלא יישארו אפליקציות ללא הגנה.',
+  category: 'Conditional Access', domain: 'conditional_access', severity: 'high',
+  benchmarkRef: 'CIS M365 v6.0.1 - 2.1.1', framework: 'cis_m365',
+  expectedState: 'At least one enabled CA policy with Cloud apps = All',
+  remediationHe: 'CA > ודא שמדיניות קיימת עם Cloud apps or actions = All cloud apps',
+  whyItMattersHe: 'מדיניות שמכסה רק אפליקציות מסוימות מאפשרת לתוקף לגשת לאפליקציות אחרות ללא הגבלה.',
+  graphApiEndpoint: '/identity/conditionalAccess/policies', requiredPermissions: ['Policy.Read.All'], isAutomated: true,
 });
 
 registerCheck({
   id: 'CIS-2.1.2',
-  title: 'Ensure sign-in risk policy is configured to block high risk sign-ins',
-  titleHe: 'ודא שמדיניות סיכון כניסה מוגדרת לחסימת כניסות בסיכון גבוה',
-  descriptionHe: 'מדיניות סיכון כניסה (Sign-in Risk) חוסמת אוטומטית כניסות שזוהו כמסוכנות על ידי Microsoft.',
-  category: 'Conditional Access',
-  domain: 'conditional_access',
-  severity: 'critical',
-  benchmarkRef: 'CIS 2.1.2',
-  benchmarkVersion: 'CIS Microsoft 365 v3.1.0',
-  framework: 'cis_m365',
-  expectedState: 'Sign-in risk policy blocks or requires MFA for high-risk sign-ins',
-  validationMethodHe: 'בדיקת מדיניות Conditional Access שמשתמשת בתנאי Sign-in Risk',
-  remediationHe: `1. היכנס ל-Microsoft Entra admin center
-2. נווט אל Protection > Conditional Access
-3. צור מדיניות חדשה
-4. Conditions > Sign-in risk: High
-5. Grant: Block access (או דרוש MFA + שינוי סיסמה)
-6. הפעל את המדיניות`,
-  whyItMattersHe: 'Microsoft משתמשת בלמידת מכונה לזיהוי כניסות חשודות (מיקום לא מוכר, כתובת IP זדונית, וכו\'). חסימת כניסות בסיכון גבוה מונעת גישה לא מורשית.',
-  manualVerificationNoteHe: null,
-  graphApiEndpoint: '/identity/conditionalAccess/policies',
-  requiredPermissions: ['Policy.Read.All'],
-  isAutomated: true,
+  title: 'Ensure device compliance is required for access',
+  titleHe: 'ודא שנדרש התקן תואם מדיניות לגישה למשאבים',
+  descriptionHe: 'רק התקנים שעומדים במדיניות Intune צריכים לקבל גישה לנתונים ארגוניים.',
+  category: 'Conditional Access', domain: 'conditional_access', severity: 'high',
+  benchmarkRef: 'CIS M365 v6.0.1 - 2.1.2', framework: 'cis_m365',
+  expectedState: 'CA policy requiring Compliant device for cloud apps access',
+  remediationHe: 'CA > New policy > Grant: Require device to be marked as compliant',
+  whyItMattersHe: 'התקן לא מנוהל שנגנב מאפשר גישה לנתונים ארגוניים. Compliant device מחייב הצפנה, PIN, עדכונים.',
+  graphApiEndpoint: '/identity/conditionalAccess/policies', requiredPermissions: ['Policy.Read.All'], isAutomated: true,
 });
 
 registerCheck({
   id: 'CIS-2.1.3',
-  title: 'Ensure user risk policy is configured to block high risk users',
-  titleHe: 'ודא שמדיניות סיכון משתמש חוסמת משתמשים בסיכון גבוה',
-  descriptionHe: 'מדיניות סיכון משתמש (User Risk) דורשת שינוי סיסמה או חוסמת משתמשים שזוהו כבעלי סיכון גבוה.',
-  category: 'Conditional Access',
-  domain: 'conditional_access',
-  severity: 'critical',
-  benchmarkRef: 'CIS 2.1.3',
-  benchmarkVersion: 'CIS Microsoft 365 v3.1.0',
-  framework: 'cis_m365',
-  expectedState: 'User risk policy requires password change or blocks high-risk users',
-  validationMethodHe: 'בדיקת מדיניות Conditional Access שמשתמשת בתנאי User Risk',
-  remediationHe: `1. היכנס ל-Microsoft Entra admin center
-2. נווט אל Protection > Conditional Access
-3. צור מדיניות חדשה
-4. Conditions > User risk: High
-5. Grant: Require password change
-6. הפעל את המדיניות`,
-  whyItMattersHe: 'משתמשים שזוהו כבסיכון גבוה (חשבון שנפרץ, credentials שדלפו) חייבים להיות מטופלים מיידית כדי למנוע נזק נוסף.',
-  manualVerificationNoteHe: null,
-  graphApiEndpoint: '/identity/conditionalAccess/policies',
-  requiredPermissions: ['Policy.Read.All'],
-  isAutomated: true,
+  title: 'Ensure sign-in frequency and session controls are configured',
+  titleHe: 'ודא שתדירות כניסה מחדש ובקרות session מוגדרות',
+  descriptionHe: 'הגדרת תדירות כניסה מחדש מבטיחה שסשנים לא נשארים פעילים ללא הגבלה.',
+  category: 'Conditional Access', domain: 'conditional_access', severity: 'medium',
+  benchmarkRef: 'CIS M365 v6.0.1 - 2.1.3', framework: 'cis_m365',
+  expectedState: 'CA policy with sign-in frequency (e.g., 1 hour for admins, 8 hours for users)',
+  remediationHe: 'CA > Session > Sign-in frequency — הגדר תדירות מתאימה לכל קבוצת משתמשים',
+  whyItMattersHe: 'סשן שנפרץ בגניבת Token נשאר בתוקף ללא הגבלה ללא בקרות session.',
+  graphApiEndpoint: '/identity/conditionalAccess/policies', requiredPermissions: ['Policy.Read.All'], isAutomated: true,
 });

@@ -1,140 +1,160 @@
 import { registerCheck } from '../checkRegistry';
 
-// ==========================================
-// Entra ID Security Checks
-// Based on CIS Microsoft 365 Foundations Benchmark v3.1.0
-// ==========================================
+// CIS Microsoft 365 Foundations Benchmark v6.0.1 - Section 1: Entra ID
 
 registerCheck({
   id: 'CIS-1.1.1',
-  title: 'Ensure Security Defaults is disabled on Azure Active Directory',
-  titleHe: 'ודא שהגדרות ברירת מחדל לאבטחה מושבתות ב-Entra ID',
-  descriptionHe: 'הגדרות ברירת מחדל לאבטחה (Security Defaults) מספקות רמת אבטחה בסיסית, אך ארגונים בוגרים צריכים להשתמש ב-Conditional Access לשליטה מדויקת יותר.',
-  category: 'Account / Authentication',
-  domain: 'entra_id',
-  severity: 'high',
-  benchmarkRef: 'CIS 1.1.1',
-  benchmarkVersion: 'CIS Microsoft 365 v3.1.0',
-  framework: 'cis_m365',
-  expectedState: 'Security Defaults should be disabled when Conditional Access policies are in use',
-  validationMethodHe: 'בדיקת הגדרות ברירת מחדל לאבטחה דרך Microsoft Graph API - endpoint: /policies/identitySecurityDefaultsEnforcementPolicy',
-  remediationHe: `1. היכנס למרכז הניהול של Microsoft Entra
-2. נווט אל Identity > Overview > Properties
-3. לחץ על "Manage security defaults"
-4. שנה את ההגדרה ל-Disabled
-5. הפעל מדיניות Conditional Access מותאמת במקום
-6. ודא שכל המשתמשים מכוסים על ידי מדיניות גישה מותנית`,
-  whyItMattersHe: 'הגדרות ברירת מחדל מספקות הגנה בסיסית בלבד. מדיניות גישה מותנית (Conditional Access) מאפשרת שליטה מדויקת ומותאמת לדרישות הארגון, כולל MFA, מגבלות מיקום, ותנאי התקן.',
-  manualVerificationNoteHe: null,
+  title: 'Ensure Security Defaults is disabled',
+  titleHe: 'ודא שהגדרות ברירת מחדל לאבטחה מושבתות',
+  descriptionHe: 'ארגונים שמשתמשים ב-Conditional Access צריכים להשבית Security Defaults כדי לאפשר שליטה מדויקת יותר.',
+  category: 'Entra ID', domain: 'entra_id', severity: 'high',
+  benchmarkRef: 'CIS M365 v6.0.1 - 1.1.1', framework: 'cis_m365',
+  expectedState: 'Security Defaults = Disabled',
+  remediationHe: 'Entra Admin Center > Identity > Overview > Properties > Manage security defaults > Disabled',
+  whyItMattersHe: 'Security Defaults לא מאפשר גמישות. עם CA ניתן לשלוט במדויק מי ניגש למה ובאיזה תנאים.',
   graphApiEndpoint: '/policies/identitySecurityDefaultsEnforcementPolicy',
-  requiredPermissions: ['Policy.Read.All'],
-  isAutomated: true,
+  requiredPermissions: ['Policy.Read.All'], isAutomated: true,
 });
 
 registerCheck({
-  id: 'CIS-1.1.3',
-  title: 'Ensure that between two and four global admins are designated',
-  titleHe: 'ודא שבין שניים לארבעה מנהלי Global Admin מוגדרים',
-  descriptionHe: 'מספר מנהלי מערכת ברמת Global Admin צריך להיות מינימלי - בין 2 ל-4. מספר גבוה מדי מגדיל את משטח התקיפה.',
-  category: 'Account / Authentication',
-  domain: 'entra_id',
-  severity: 'critical',
-  benchmarkRef: 'CIS 1.1.3',
-  benchmarkVersion: 'CIS Microsoft 365 v3.1.0',
-  framework: 'cis_m365',
-  expectedState: 'Between 2 and 4 Global Administrator accounts',
-  validationMethodHe: 'בדיקת מספר המשתמשים עם תפקיד Global Administrator דרך Microsoft Graph API',
-  remediationHe: `1. היכנס למרכז הניהול של Microsoft Entra
-2. נווט אל Identity > Roles & admins > All roles
-3. חפש את תפקיד "Global Administrator"
-4. סקור את רשימת המשתמשים המוקצים
-5. הסר מנהלים מיותרים או הוסף מנהל גיבוי
-6. ודא שיש בין 2 ל-4 מנהלים בלבד
-7. שקול שימוש ב-PIM (Privileged Identity Management) לגישה Just-in-Time`,
-  whyItMattersHe: 'חשבונות Global Admin הם המטרה העיקרית לתוקפים. מספר מצומצם של מנהלים מקטין את שטח התקיפה, בעוד שלפחות 2 מנהלים מבטיחים המשכיות עסקית.',
-  manualVerificationNoteHe: null,
-  graphApiEndpoint: '/directoryRoles/roleTemplateId=62e90394-69f5-4237-9190-012177145e10/members',
-  requiredPermissions: ['Directory.Read.All', 'RoleManagement.Read.Directory'],
-  isAutomated: true,
-});
-
-registerCheck({
-  id: 'CIS-1.1.4',
-  title: 'Ensure self-service password reset is enabled',
-  titleHe: 'ודא שאיפוס סיסמה עצמאי מופעל',
-  descriptionHe: 'איפוס סיסמה עצמאי (SSPR) מאפשר למשתמשים לאפס סיסמאות ללא עזרת ה-IT, תוך שמירה על אבטחה.',
-  category: 'Account / Authentication',
-  domain: 'entra_id',
-  severity: 'medium',
-  benchmarkRef: 'CIS 1.1.4',
-  benchmarkVersion: 'CIS Microsoft 365 v3.1.0',
-  framework: 'cis_m365',
-  expectedState: 'Self-service password reset enabled for all users',
-  validationMethodHe: 'בדיקת הגדרת SSPR דרך Microsoft Graph API - endpoint: /policies/authenticationMethodsPolicy',
-  remediationHe: `1. היכנס ל-Microsoft Entra admin center
-2. נווט אל Protection > Password reset
-3. הגדר "Self service password reset enabled" ל-All
-4. הגדר שיטות אימות מתאימות (לפחות 2)
-5. הפעל Registration enforcement
-6. סקור את הגדרות ההתראות`,
-  whyItMattersHe: 'SSPR מפחית עומס על צוות IT, משפר את חוויית המשתמש, ומבטיח שמשתמשים יכולים לשחזר גישה בצורה מאובטחת ללא התערבות ידנית.',
-  manualVerificationNoteHe: null,
-  graphApiEndpoint: '/policies/authenticationMethodsPolicy',
-  requiredPermissions: ['Policy.Read.All'],
-  isAutomated: true,
+  id: 'CIS-1.1.2',
+  title: 'Ensure Password Hash Sync is enabled for hybrid environments',
+  titleHe: 'ודא שסנכרון גיבוב סיסמאות מופעל בסביבה היברידית',
+  descriptionHe: 'Password Hash Sync מאפשר ל-Entra ID Protection לזהות סיסמאות שנפרצו ולהגן על המשתמשים.',
+  category: 'Entra ID', domain: 'entra_id', severity: 'medium',
+  benchmarkRef: 'CIS M365 v6.0.1 - 1.1.2', framework: 'cis_m365',
+  expectedState: 'Password Hash Sync = Enabled',
+  remediationHe: 'הפעל Password Hash Sync ב-Azure AD Connect / Entra Connect Sync',
+  whyItMattersHe: 'בלי PHS, Entra ID Protection לא יכולה לזהות סיסמאות שדלפו ב-breached credentials.',
+  graphApiEndpoint: '/organization', requiredPermissions: ['Directory.Read.All'], isAutomated: false,
 });
 
 registerCheck({
   id: 'CIS-1.2.1',
-  title: 'Ensure multi-factor authentication is enabled for all users',
-  titleHe: 'ודא שאימות רב-שלבי (MFA) מופעל לכל המשתמשים',
-  descriptionHe: 'אימות רב-שלבי הוא ההגנה הבסיסית ביותר נגד גניבת חשבונות. יש לוודא שכל המשתמשים מחויבים ב-MFA.',
-  category: 'Account / Authentication',
-  domain: 'entra_id',
-  severity: 'critical',
-  benchmarkRef: 'CIS 1.2.1',
-  benchmarkVersion: 'CIS Microsoft 365 v3.1.0',
-  framework: 'cis_m365',
-  expectedState: 'MFA enabled and enforced for all users via Conditional Access',
-  validationMethodHe: 'בדיקת מדיניות גישה מותנית שדורשת MFA עבור כל המשתמשים',
-  remediationHe: `1. היכנס ל-Microsoft Entra admin center
-2. נווט אל Protection > Conditional Access
-3. צור מדיניות חדשה או ערוך קיימת
-4. Users: All users
-5. Cloud apps: All cloud apps
-6. Grant: Require multi-factor authentication
-7. הפעל את המדיניות
-8. בדוק שאין אי-כללים (Exclusions) לא מוצדקים`,
-  whyItMattersHe: 'אימות רב-שלבי חוסם מעל 99.9% מהתקפות גניבת זהות. ללא MFA, סיסמה שנפרצה מאפשרת גישה מלאה לחשבון ולכל המידע הארגוני.',
-  manualVerificationNoteHe: null,
-  graphApiEndpoint: '/identity/conditionalAccess/policies',
-  requiredPermissions: ['Policy.Read.All'],
-  isAutomated: true,
+  title: 'Ensure MFA is enforced for all privileged users',
+  titleHe: 'ודא שMFA מופעל לכל בעלי ההרשאות המוגברות',
+  descriptionHe: 'כל חשבון עם תפקיד מנהלתי חייב לאמת בשני גורמים ללא יוצא מן הכלל.',
+  category: 'Entra ID', domain: 'entra_id', severity: 'critical',
+  benchmarkRef: 'CIS M365 v6.0.1 - 1.2.1', framework: 'cis_m365',
+  expectedState: 'CA policy requiring MFA for all directory roles',
+  remediationHe: 'צור מדיניות CA: Users = Directory roles (all admin roles), Grant = Require MFA',
+  whyItMattersHe: 'חשבון מנהל שנפרץ ללא MFA מאפשר השתלטות מלאה על הסביבה.',
+  graphApiEndpoint: '/identity/conditionalAccess/policies', requiredPermissions: ['Policy.Read.All'], isAutomated: true,
 });
 
 registerCheck({
   id: 'CIS-1.2.2',
-  title: 'Ensure multi-factor authentication is enabled for all admins',
-  titleHe: 'ודא שאימות רב-שלבי מופעל לכל המנהלים',
-  descriptionHe: 'מנהלי מערכת חייבים להיות מוגנים ב-MFA ללא יוצא מן הכלל. חשבונות מנהלים הם יעד עדיפות לתוקפים.',
-  category: 'Account / Authentication',
-  domain: 'entra_id',
-  severity: 'critical',
-  benchmarkRef: 'CIS 1.2.2',
-  benchmarkVersion: 'CIS Microsoft 365 v3.1.0',
-  framework: 'cis_m365',
-  expectedState: 'MFA enforced for all administrative roles',
-  validationMethodHe: 'בדיקת מדיניות Conditional Access שדורשת MFA לתפקידי מנהל',
-  remediationHe: `1. היכנס ל-Microsoft Entra admin center
-2. נווט אל Protection > Conditional Access
-3. צור מדיניות ייעודית למנהלים
-4. Users: Directory roles - בחר את כל תפקידי המנהל
-5. Cloud apps: All cloud apps
-6. Grant: Require multi-factor authentication
-7. הפעל מיד - ללא תקופת מעבר`,
-  whyItMattersHe: 'חשבונות מנהלים בעלי הרשאות מוגברות הם היעד המועדף על תוקפים. פריצה לחשבון מנהל ללא MFA עלולה להוביל להשתלטות מלאה על הסביבה.',
-  manualVerificationNoteHe: null,
-  graphApiEndpoint: '/identity/conditionalAccess/policies',
-  requiredPermissions: ['Policy.Read.All'],
-  isAutomated: true,
+  title: 'Ensure MFA is enforced for all users',
+  titleHe: 'ודא שMFA מופעל לכל המשתמשים',
+  descriptionHe: 'כל משתמש, לא רק מנהלים, חייב להשתמש ב-MFA לכניסה לשירותי Microsoft 365.',
+  category: 'Entra ID', domain: 'entra_id', severity: 'critical',
+  benchmarkRef: 'CIS M365 v6.0.1 - 1.2.2', framework: 'cis_m365',
+  expectedState: 'CA policy requiring MFA for All users on All cloud apps',
+  remediationHe: 'צור מדיניות CA: Users = All users, Cloud apps = All, Grant = Require MFA',
+  whyItMattersHe: 'MFA חוסם 99.9% מהתקפות credential stuffing ו-password spray.',
+  graphApiEndpoint: '/identity/conditionalAccess/policies', requiredPermissions: ['Policy.Read.All'], isAutomated: true,
+});
+
+registerCheck({
+  id: 'CIS-1.3.1',
+  title: 'Ensure password expiration policy is set to never expire (cloud-only)',
+  titleHe: 'ודא שמדיניות פקיעת סיסמה מוגדרת ל"לעולם לא תפוג" לחשבונות ענן',
+  descriptionHe: 'NIST ו-Microsoft ממליצים לא לדרוש שינוי סיסמה תקופתי כשיש MFA ומעקב אחר סיכונים.',
+  category: 'Entra ID', domain: 'entra_id', severity: 'medium',
+  benchmarkRef: 'CIS M365 v6.0.1 - 1.3.1', framework: 'cis_m365',
+  expectedState: 'Password never expires for cloud-only accounts',
+  remediationHe: 'Microsoft 365 Admin Center > Settings > Org settings > Security & privacy > Password expiration policy > Never expire',
+  whyItMattersHe: 'לחץ לשינוי סיסמה גורם למשתמשים לבחור סיסמאות חלשות וצפויות. MFA מפצה על כך.',
+  graphApiEndpoint: '/domains', requiredPermissions: ['Directory.Read.All'], isAutomated: false,
+});
+
+registerCheck({
+  id: 'CIS-1.3.3',
+  title: 'Ensure SSPR is enabled and requires 2 authentication methods',
+  titleHe: 'ודא שאיפוס סיסמה עצמאי מופעל ודורש 2 שיטות אימות',
+  descriptionHe: 'SSPR עם 2 שיטות מאמת מזהה בוודאות שמשתמש חוקי מאפס את הסיסמה שלו.',
+  category: 'Entra ID', domain: 'entra_id', severity: 'medium',
+  benchmarkRef: 'CIS M365 v6.0.1 - 1.3.3', framework: 'cis_m365',
+  expectedState: 'SSPR enabled for All users, 2 methods required',
+  remediationHe: 'Entra > Protection > Password reset > Properties = All, Authentication methods = 2',
+  whyItMattersHe: 'דרישת שיטה אחת בלבד לאיפוס סיסמה חושפת לתקיפת account takeover דרך מספר טלפון גנוב.',
+  graphApiEndpoint: '/policies/authenticationMethodsPolicy', requiredPermissions: ['Policy.Read.All'], isAutomated: false,
+});
+
+registerCheck({
+  id: 'CIS-1.4.1',
+  title: 'Ensure between 2 and 4 Global Admins are designated',
+  titleHe: 'ודא שבין 2 ל-4 מנהלי Global Admin מוגדרים',
+  descriptionHe: 'מספר זה מאזן בין זמינות (לפחות 2) לצמצום משטח תקיפה (לא יותר מ-4).',
+  category: 'Entra ID', domain: 'entra_id', severity: 'critical',
+  benchmarkRef: 'CIS M365 v6.0.1 - 1.4.1', framework: 'cis_m365',
+  expectedState: '2 to 4 Global Administrator accounts',
+  remediationHe: 'Entra > Roles & admins > Global Administrator — סקור ועדכן את הרשימה',
+  whyItMattersHe: 'יותר מ-4 מנהלים מגדיל משטח תקיפה; פחות מ-2 יוצר single point of failure.',
+  graphApiEndpoint: '/directoryRoles', requiredPermissions: ['Directory.Read.All', 'RoleManagement.Read.Directory'], isAutomated: true,
+});
+
+registerCheck({
+  id: 'CIS-1.4.2',
+  title: 'Ensure admin accounts are cloud-only (not synced)',
+  titleHe: 'ודא שחשבונות מנהל הם ענן-בלבד ולא מסונכרנים מ-AD מקומי',
+  descriptionHe: 'חשבונות ניהול מסונכרנים חושפים את הענן לפגיעויות ב-Active Directory המקומי.',
+  category: 'Entra ID', domain: 'entra_id', severity: 'high',
+  benchmarkRef: 'CIS M365 v6.0.1 - 1.4.2', framework: 'cis_m365',
+  expectedState: 'All admin accounts are cloud-only (onPremisesSyncEnabled = false)',
+  remediationHe: 'צור חשבונות ניהול ייעודיים בענן עם סיומת .onmicrosoft.com; השתמש בחשבונות ה-AD המקומי לעבודה שוטפת בלבד.',
+  whyItMattersHe: 'תוקף שפורץ ל-AD המקומי יכול להשתלט על חשבונות מנהל מסונכרנים ומשם על הענן.',
+  graphApiEndpoint: '/directoryRoles', requiredPermissions: ['Directory.Read.All'], isAutomated: true,
+});
+
+registerCheck({
+  id: 'CIS-1.5.1',
+  title: 'Ensure Legacy Authentication protocols are blocked',
+  titleHe: 'ודא שפרוטוקולי אימות Legacy חסומים',
+  descriptionHe: 'פרוטוקולים ישנים כמו BasicAuth, IMAP, POP3 לא תומכים ב-MFA ומאפשרים עקיפת מדיניות CA.',
+  category: 'Conditional Access', domain: 'conditional_access', severity: 'critical',
+  benchmarkRef: 'CIS M365 v6.0.1 - 1.5.1', framework: 'cis_m365',
+  expectedState: 'CA policy blocking Exchange ActiveSync and Other legacy clients',
+  remediationHe: 'צור מדיניות CA: Client apps = Exchange ActiveSync + Other, Grant = Block',
+  whyItMattersHe: 'בין 70-90% מהתקפות credential stuffing משתמשות בפרוטוקולי legacy שלא נחסמים על ידי MFA.',
+  graphApiEndpoint: '/identity/conditionalAccess/policies', requiredPermissions: ['Policy.Read.All'], isAutomated: true,
+});
+
+registerCheck({
+  id: 'CIS-1.6.1',
+  title: 'Ensure Sign-in Risk policy blocks high/medium risk logins',
+  titleHe: 'ודא שמדיניות סיכון כניסה חוסמת סיכון גבוה ובינוני',
+  descriptionHe: 'Entra ID Protection מזהה כניסות חשודות. מדיניות CA צריכה לחסום או לדרוש MFA בסיכון גבוה/בינוני.',
+  category: 'Conditional Access', domain: 'conditional_access', severity: 'critical',
+  benchmarkRef: 'CIS M365 v6.0.1 - 1.6.1', framework: 'cis_m365',
+  expectedState: 'CA policy: signInRiskLevels = high, medium → Block or MFA',
+  remediationHe: 'CA > New policy > Conditions: Sign-in risk = High, Medium > Grant: Block or MFA',
+  whyItMattersHe: 'כניסות מסיכון גבוה הן לרוב תוקפים שגנבו סיסמאות. חסימה אוטומטית מונעת נזק בזמן אמת.',
+  graphApiEndpoint: '/identity/conditionalAccess/policies', requiredPermissions: ['Policy.Read.All'], isAutomated: true,
+});
+
+registerCheck({
+  id: 'CIS-1.6.2',
+  title: 'Ensure User Risk policy forces password change on high risk',
+  titleHe: 'ודא שמדיניות סיכון משתמש מחייבת שינוי סיסמה בסיכון גבוה',
+  descriptionHe: 'כשמשתמש מסומן כסיכון גבוה (למשל אישורים שדלפו), יש לחייבו לשנות סיסמה.',
+  category: 'Conditional Access', domain: 'conditional_access', severity: 'critical',
+  benchmarkRef: 'CIS M365 v6.0.1 - 1.6.2', framework: 'cis_m365',
+  expectedState: 'CA policy: userRiskLevels = high → Block or password change',
+  remediationHe: 'CA > New policy > Conditions: User risk = High > Grant: Block or Require password change',
+  whyItMattersHe: 'משתמשים בסיכון גבוה לרוב נפגעו מ-credential breach. חידוש מוסמך של הסיסמה מגן על החשבון.',
+  graphApiEndpoint: '/identity/conditionalAccess/policies', requiredPermissions: ['Policy.Read.All'], isAutomated: true,
+});
+
+registerCheck({
+  id: 'CIS-1.7.1',
+  title: 'Ensure guest users are not assigned to admin roles',
+  titleHe: 'ודא שמשתמשי אורח אינם מוקצים לתפקידי מנהל',
+  descriptionHe: 'משתמשי אורח מגיעים מארגונים חיצוניים ואין לאפשר להם הרשאות ניהולתיות.',
+  category: 'Entra ID', domain: 'entra_id', severity: 'critical',
+  benchmarkRef: 'CIS M365 v6.0.1 - 1.7.1', framework: 'cis_m365',
+  expectedState: 'No guest users with any directory role',
+  remediationHe: 'Entra > Roles & admins > סקור כל תפקיד — הסר משתמשי אורח מכל תפקיד ניהולי',
+  whyItMattersHe: 'אורח עם הרשאות מנהל שחשבונו נפרץ בארגון המקורי מאפשר לתוקף גישה מנהלתית לסביבתך.',
+  graphApiEndpoint: '/users', requiredPermissions: ['Directory.Read.All', 'RoleManagement.Read.Directory'], isAutomated: true,
 });

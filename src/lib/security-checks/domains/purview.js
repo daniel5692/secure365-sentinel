@@ -1,80 +1,42 @@
 import { registerCheck } from '../checkRegistry';
 
-// ==========================================
-// Purview / Compliance / Mail Flow Security Checks
-// ==========================================
+// CIS Microsoft 365 Foundations Benchmark v6.0.1 - Section 7: Microsoft Purview
 
 registerCheck({
   id: 'CIS-7.1.1',
-  title: 'Ensure DLP policies are enabled for Microsoft 365 services',
-  titleHe: 'ודא שמדיניות DLP מופעלת לשירותי Microsoft 365',
-  descriptionHe: 'מדיניות DLP (Data Loss Prevention) מגינה על מידע רגיש מפני דליפה באמצעות זיהוי ומניעה אוטומטית.',
-  category: 'Purview / Compliance',
-  domain: 'purview',
-  severity: 'high',
-  benchmarkRef: 'CIS 7.1.1',
-  benchmarkVersion: 'CIS Microsoft 365 v3.1.0',
-  framework: 'cis_m365',
-  expectedState: 'DLP policies active for Exchange, SharePoint, OneDrive, and Teams',
-  validationMethodHe: 'בדיקת מדיניות DLP פעילה ב-Microsoft Purview compliance portal',
-  remediationHe: `1. היכנס ל-Microsoft Purview compliance portal
-2. נווט אל Data loss prevention > Policies
-3. צור מדיניות DLP חדשה
-4. בחר תבניות לסוגי מידע רגיש (מספרי כרטיסי אשראי, ת.ז. וכו')
-5. הפעל לכל שירותי Microsoft 365
-6. הגדר פעולות: התראה, חסימה, או דיווח`,
-  whyItMattersHe: 'ללא מדיניות DLP, מידע רגיש כמו נתונים פיננסיים, מידע אישי ומסמכים סודיים עלולים להישלח או להיות משותפים ללא בקרה.',
-  manualVerificationNoteHe: null,
-  graphApiEndpoint: '/compliance/dlp/policies',
-  requiredPermissions: ['InformationProtectionPolicy.Read.All'],
-  isAutomated: true,
+  title: 'Ensure Audit Log Search is enabled',
+  titleHe: 'ודא שחיפוש יומן ביקורת מופעל',
+  descriptionHe: 'Unified Audit Log מתעד פעולות בכל שירותי Microsoft 365 ומשמש לחקירות ותגובה לאירועים.',
+  category: 'Purview / Compliance', domain: 'purview', severity: 'critical',
+  benchmarkRef: 'CIS M365 v6.0.1 - 7.1.1', framework: 'cis_m365',
+  expectedState: 'Audit log search enabled in Microsoft Purview',
+  remediationHe: 'Microsoft Purview > Audit > Start recording user and admin activity',
+  whyItMattersHe: 'ללא audit log לא ניתן לחקור אירועי אבטחה. זה הנכס הקריטי ביותר לזיהוי פריצות.',
+  graphApiEndpoint: '/security/secureScores', requiredPermissions: ['SecurityEvents.Read.All'], isAutomated: true,
 });
 
 registerCheck({
   id: 'CIS-7.2.1',
-  title: 'Ensure audit log search is enabled',
-  titleHe: 'ודא שחיפוש יומן ביקורת מופעל',
-  descriptionHe: 'יומן הביקורת (Audit Log) מתעד פעולות משתמשים ומנהלים ומהווה כלי חיוני לחקירות אבטחה.',
-  category: 'Purview / Compliance',
-  domain: 'purview',
-  severity: 'critical',
-  benchmarkRef: 'CIS 7.2.1',
-  benchmarkVersion: 'CIS Microsoft 365 v3.1.0',
-  framework: 'cis_m365',
-  expectedState: 'Unified audit logging enabled',
-  validationMethodHe: 'בדיקה שיומן ביקורת מאוחד (Unified Audit Log) מופעל',
-  remediationHe: `1. היכנס ל-Microsoft Purview compliance portal
-2. נווט אל Audit
-3. אם מופיעה הודעה להפעלה, לחץ "Start recording"
-4. ודא שההקלטה פעילה
-5. שקול הפעלת Advanced Audit לשמירה ממושכת`,
-  whyItMattersHe: 'ללא יומן ביקורת, אין אפשרות לזהות חדירות, לחקור אירועי אבטחה או לעמוד בדרישות רגולציה. זהו כלי בסיסי וחיוני.',
-  manualVerificationNoteHe: null,
-  graphApiEndpoint: '/admin/reportSettings/unified-audit-log-ingestion-enabled',
-  requiredPermissions: ['AuditLog.Read.All'],
-  isAutomated: true,
+  title: 'Ensure at least one DLP policy is active',
+  titleHe: 'ודא שקיימת לפחות מדיניות DLP פעילה אחת',
+  descriptionHe: 'Data Loss Prevention מונעת שיתוף לא מורשה של מידע רגיש כמו מספרי כרטיסי אשראי, ת.ז., נתוני בריאות.',
+  category: 'Purview / Compliance', domain: 'purview', severity: 'high',
+  benchmarkRef: 'CIS M365 v6.0.1 - 7.2.1', framework: 'cis_m365',
+  expectedState: 'At least one active DLP policy covering Exchange, SharePoint, Teams',
+  remediationHe: 'Microsoft Purview > Data loss prevention > Policies > Create policy — בחר תבנית רלוונטית',
+  whyItMattersHe: 'ללא DLP, עובדים יכולים לשלוח בטעות (או בכוונה) מידע רגיש מחוץ לארגון.',
+  graphApiEndpoint: null, requiredPermissions: [], isAutomated: false,
 });
 
 registerCheck({
-  id: 'CIS-8.1.1',
-  title: 'Ensure SPF records are published for all Exchange Online domains',
-  titleHe: 'ודא שרשומות SPF מוגדרות לכל דומייני Exchange Online',
-  descriptionHe: 'SPF (Sender Policy Framework) מגדיר אילו שרתים מורשים לשלוח דואר בשם הדומיין.',
-  category: 'Mail Flow Protection',
-  domain: 'mail_flow',
-  severity: 'medium',
-  benchmarkRef: 'CIS 8.1.1',
-  benchmarkVersion: 'CIS Microsoft 365 v3.1.0',
-  framework: 'cis_m365',
-  expectedState: 'SPF record configured for all domains with -all or ~all',
-  validationMethodHe: 'בדיקת רשומות DNS של SPF לכל דומיין',
-  remediationHe: `1. היכנס למערכת ניהול ה-DNS של הדומיין
-2. הוסף רשומת TXT: "v=spf1 include:spf.protection.outlook.com -all"
-3. ודא שאין רשומת SPF כפולה
-4. בדוק עם כלי SPF validator`,
-  whyItMattersHe: 'ללא SPF, תוקפים יכולים לזייף דואר שנראה כנשלח מהדומיין הארגוני, מה שמאפשר התקפות פישינג מתקדמות.',
-  manualVerificationNoteHe: 'בדיקה זו דורשת גישה לרשומות DNS ואינה ניתנת לאוטומציה מלאה דרך Graph API בלבד.',
-  graphApiEndpoint: null,
-  requiredPermissions: [],
-  isAutomated: false,
+  id: 'CIS-7.3.1',
+  title: 'Ensure sensitivity labels are configured and published',
+  titleHe: 'ודא שתוויות רגישות מוגדרות ומפורסמות',
+  descriptionHe: 'Sensitivity Labels מאפשרות סיווג וסימון מסמכים ודואר, ומאפשרות הגנה אוטומטית בהתאם לסיווג.',
+  category: 'Purview / Compliance', domain: 'purview', severity: 'medium',
+  benchmarkRef: 'CIS M365 v6.0.1 - 7.3.1', framework: 'cis_m365',
+  expectedState: 'Sensitivity labels created and published to users',
+  remediationHe: 'Microsoft Purview > Information protection > Labels > Create labels > Publish labels to users',
+  whyItMattersHe: 'בלי סיווג, עובדים לא יודעים אילו מסמכים הם רגישים. תוויות מאפשרות הגנה אוטומטית ועקבית.',
+  graphApiEndpoint: null, requiredPermissions: [], isAutomated: false,
 });

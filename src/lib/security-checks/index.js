@@ -1,11 +1,12 @@
 // Security Checks Index - Import all domain modules to register checks
-// Adding a new domain: create a new file in domains/ and import it here
+// CIS Microsoft 365 Foundations Benchmark v6.0.1
 
 import './domains/entraId';
 import './domains/conditionalAccess';
 import './domains/exchangeOnline';
 import './domains/defender';
 import './domains/sharepoint';
+import './domains/teams';
 import './domains/purview';
 
 // Re-export registry for convenience
