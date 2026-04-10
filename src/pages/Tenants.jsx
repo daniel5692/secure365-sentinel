@@ -1,4 +1,4 @@
-import { Server, Plus, MoreVertical, ExternalLink, Wifi, WifiOff, Clock, Trash2, RefreshCw } from "lucide-react";
+import { Server, Plus, MoreVertical, ExternalLink, Wifi, WifiOff, Clock, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -21,7 +21,7 @@ export default function Tenants() {
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ tenant_name: '', domain: '' });
+  const [form, setForm] = useState({ tenant_name: '', domain: '', customer_tenant_id: '' });
   const [saving, setSaving] = useState(false);
 
   const loadTenants = async () => {
@@ -36,14 +36,29 @@ export default function Tenants() {
   const handleAdd = async () => {
     if (!form.tenant_name) return;
     setSaving(true);
-    await base44.entities.ConnectedTenant.create({
+    // Create the tenant record first
+    const tenant = await base44.entities.ConnectedTenant.create({
       tenant_name: form.tenant_name,
       domain: form.domain,
+      tenant_id: form.customer_tenant_id,
       workspace_id: user?.id || 'default',
       connection_status: 'pending_consent',
       total_scans: 0,
     });
-    setForm({ tenant_name: '', domain: '' });
+
+    // If customer tenant ID provided, generate consent URL and open it
+    if (form.customer_tenant_id) {
+      const res = await base44.functions.invoke('generateConsentUrl', {
+        customer_tenant_id: form.customer_tenant_id,
+        tenant_record_id: tenant.id,
+        redirect_uri: window.location.origin + '/tenants',
+      });
+      if (res.data?.consent_url) {
+        window.open(res.data.consent_url, '_blank');
+      }
+    }
+
+    setForm({ tenant_name: '', domain: '', customer_tenant_id: '' });
     setShowAdd(false);
     setSaving(false);
     loadTenants();
@@ -86,7 +101,18 @@ export default function Tenants() {
                 />
               </div>
               <div>
-                <Label>דומיין ראשי</Label>
+                <Label>Tenant ID (Directory ID)</Label>
+                <Input
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                  className="mt-1.5 font-mono text-xs"
+                  dir="ltr"
+                  value={form.customer_tenant_id}
+                  onChange={e => setForm(f => ({ ...f, customer_tenant_id: e.target.value }))}
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">נמצא ב: Azure Portal → Entra ID → Properties → Tenant ID</p>
+              </div>
+              <div>
+                <Label>דומיין ראשי (אופציונלי)</Label>
                 <Input
                   placeholder="example.onmicrosoft.com"
                   className="mt-1.5"

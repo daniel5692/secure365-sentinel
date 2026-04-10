@@ -44,7 +44,8 @@ export default function Scans() {
     const tenant = tenants.find(t => t.id === scanTenant);
     if (!tenant) return;
     setStarting(true);
-    await base44.entities.ScanJob.create({
+    // Create scan job
+    const scan = await base44.entities.ScanJob.create({
       workspace_id: user?.id || 'default',
       tenant_id: tenant.id,
       tenant_name: tenant.tenant_name,
@@ -55,9 +56,22 @@ export default function Scans() {
       benchmark_version: 'CIS Microsoft 365 v3.1.0',
       framework: 'cis_m365',
     });
+    // Run the scan (async - don't await, refresh list)
+    base44.functions.invoke('runScan', {
+      scan_job_id: scan.id,
+      tenant_record_id: tenant.id,
+      customer_tenant_id: tenant.tenant_id,
+      workspace_id: user?.id || 'default',
+    });
+    // Refresh list immediately to show queued, then again after a moment
     const updated = await base44.entities.ScanJob.list('-created_date', 50);
     setScans(updated);
     setStarting(false);
+    // Poll for updates
+    setTimeout(async () => {
+      const r = await base44.entities.ScanJob.list('-created_date', 50);
+      setScans(r);
+    }, 5000);
   };
 
   const filteredScans = selectedTenant === 'all'
