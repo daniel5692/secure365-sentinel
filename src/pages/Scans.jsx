@@ -1,4 +1,4 @@
-import { Scan, Play, Clock, CheckCircle2, XCircle, Loader2, Server, Plus } from "lucide-react";
+import { Scan, Play, Clock, CheckCircle2, XCircle, Loader2, Server, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Progress } from "@/components/ui/progress";
@@ -44,7 +44,6 @@ export default function Scans() {
     const tenant = tenants.find(t => t.id === scanTenant);
     if (!tenant) return;
     setStarting(true);
-    // Create scan job
     const scan = await base44.entities.ScanJob.create({
       workspace_id: user?.id || 'default',
       tenant_id: tenant.id,
@@ -53,25 +52,33 @@ export default function Scans() {
       progress: 0,
       total_checks: 0,
       completed_checks: 0,
-      benchmark_version: 'CIS Microsoft 365 v3.1.0',
+      benchmark_version: 'CIS Microsoft 365 v6.0.1',
       framework: 'cis_m365',
     });
-    // Run the scan (async - don't await, refresh list)
     base44.functions.invoke('runScan', {
       scan_job_id: scan.id,
       tenant_record_id: tenant.id,
       customer_tenant_id: tenant.tenant_id,
       workspace_id: user?.id || 'default',
     });
-    // Refresh list immediately to show queued, then again after a moment
     const updated = await base44.entities.ScanJob.list('-created_date', 50);
     setScans(updated);
     setStarting(false);
-    // Poll for updates
     setTimeout(async () => {
       const r = await base44.entities.ScanJob.list('-created_date', 50);
       setScans(r);
     }, 5000);
+  };
+
+  const handleDeleteScan = async (e, scanId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm('למחוק את הסריקה וכל הממצאים שלה?')) return;
+    // Delete all check results for this scan
+    const results = await base44.entities.CheckResult.filter({ scan_job_id: scanId });
+    await Promise.all(results.map(r => base44.entities.CheckResult.delete(r.id)));
+    await base44.entities.ScanJob.delete(scanId);
+    setScans(prev => prev.filter(s => s.id !== scanId));
   };
 
   const filteredScans = selectedTenant === 'all'
@@ -185,7 +192,7 @@ export default function Scans() {
                         <Progress value={scan.progress} className="mt-2 h-1.5" />
                       )}
                     </div>
-                    <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-4">
                       {scan.summary && (
                         <div className="flex items-center gap-3">
                           <div className="text-center">
@@ -212,6 +219,13 @@ export default function Scans() {
                           {scan.overall_score}
                         </div>
                       )}
+                      <button
+                        onClick={(e) => handleDeleteScan(e, scan.id)}
+                        className="p-2 rounded-lg hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors"
+                        title="מחק סריקה"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
                 </div>

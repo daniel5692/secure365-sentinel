@@ -10,6 +10,7 @@ import { base44 } from "@/api/base44Client";
 
 export default function Findings() {
   const [results, setResults] = useState([]);
+  const [scans, setScans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [severityFilter, setSeverityFilter] = useState('all');
@@ -17,14 +18,24 @@ export default function Findings() {
   const [domainFilter, setDomainFilter] = useState('all');
   const [selectedFinding, setSelectedFinding] = useState(null);
 
+  // Read scan param from URL
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlScanId = urlParams.get('scan');
+  const [selectedScan, setSelectedScan] = useState(urlScanId || 'all');
+
   useEffect(() => {
-    base44.entities.CheckResult.list('-created_date', 200).then(data => {
-      setResults(data);
+    Promise.all([
+      base44.entities.CheckResult.list('-created_date', 500),
+      base44.entities.ScanJob.list('-created_date', 50),
+    ]).then(([r, s]) => {
+      setResults(r);
+      setScans(s.filter(sc => sc.status === 'completed'));
       setLoading(false);
     });
   }, []);
 
   const filtered = results.filter(r => {
+    if (selectedScan !== 'all' && r.scan_job_id !== selectedScan) return false;
     if (search && !r.check_title?.toLowerCase().includes(search.toLowerCase()) && !r.check_id?.toLowerCase().includes(search.toLowerCase())) return false;
     if (severityFilter !== 'all' && r.severity !== severityFilter) return false;
     if (statusFilter !== 'all' && r.status !== statusFilter) return false;
@@ -38,11 +49,26 @@ export default function Findings() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">ממצאי אבטחה</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {loading ? 'טוען...' : `${filtered.length} ממצאים מתוך ${results.length} בדיקות`}
-        </p>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">ממצאי אבטחה</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {loading ? 'טוען...' : `${filtered.length} ממצאים${selectedScan !== 'all' ? ` בסריקה זו` : ' בסך הכל'}`}
+          </p>
+        </div>
+        <Select value={selectedScan} onValueChange={setSelectedScan}>
+          <SelectTrigger className="w-64">
+            <SelectValue placeholder="בחר סריקה" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">כל הסריקות</SelectItem>
+            {scans.map(s => (
+              <SelectItem key={s.id} value={s.id}>
+                {s.tenant_name} — {s.created_date ? new Date(s.created_date).toLocaleDateString('he-IL') : ''}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
