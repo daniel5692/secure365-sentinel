@@ -45,11 +45,30 @@ async function getSecureScoreControls(token) {
   return _secureScoreCache;
 }
 
-function getControl(score, controlName) {
+function getControl(score, ...keywords) {
   if (!score?.controlScores) return null;
-  return score.controlScores.find(c =>
-    c.controlName?.toLowerCase() === controlName.toLowerCase() ||
-    c.controlName?.toLowerCase().includes(controlName.toLowerCase())
+  for (const kw of keywords) {
+    const found = score.controlScores.find(c =>
+      c.controlName?.toLowerCase().includes(kw.toLowerCase())
+    );
+    if (found) return found;
+  }
+  return null;
+}
+
+// Helper: check if a CA policy's includeUsers covers 'All'
+function includesAllUsers(policy) {
+  const users = policy.conditions?.users?.includeUsers;
+  if (!users) return false;
+  if (Array.isArray(users)) return users.includes('All') || users.includes('all');
+  return users === 'All' || users === 'all';
+}
+
+// Helper: check if a CA policy enforces MFA (builtInControls or authenticationStrength)
+function hasMfaControl(policy) {
+  return !!(
+    policy.grantControls?.builtInControls?.includes('mfa') ||
+    policy.grantControls?.authenticationStrength != null
   );
 }
 
@@ -102,8 +121,8 @@ async function runCheck(token, checkId) {
       const data = await graphGet(token, '/identity/conditionalAccess/policies');
       const policies = (data.value || []).filter(p => p.state === 'enabled');
       const mfaAdminPolicies = policies.filter(p =>
-        p.grantControls?.builtInControls?.includes('mfa') &&
-        (p.conditions?.users?.includeRoles?.length > 0 || p.conditions?.users?.includeUsers === 'All')
+        hasMfaControl(p) &&
+        (p.conditions?.users?.includeRoles?.length > 0 || includesAllUsers(p))
       );
       return {
         status: mfaAdminPolicies.length > 0 ? 'passed' : 'failed',
@@ -120,18 +139,22 @@ async function runCheck(token, checkId) {
     case 'CIS-1.2.2': {
       const data = await graphGet(token, '/identity/conditionalAccess/policies');
       const policies = (data.value || []).filter(p => p.state === 'enabled');
-      const mfaAllPolicies = policies.filter(p =>
-        p.grantControls?.builtInControls?.includes('mfa') &&
-        p.conditions?.users?.includeUsers === 'All'
-      );
+      // Match policies that cover all users AND enforce MFA (via builtInControls or authStrength)
+      const mfaAllPolicies = policies.filter(p => includesAllUsers(p) && hasMfaControl(p));
+      // Also check broader coverage: any large policy with MFA
+      const anyMfaPolicies = policies.filter(p => hasMfaControl(p));
+      const passed = mfaAllPolicies.length > 0;
       return {
-        status: mfaAllPolicies.length > 0 ? 'passed' : 'failed',
-        actual_value: `${mfaAllPolicies.length} מדיניות CA עם MFA לכלל המשתמשים`,
+        status: passed ? 'passed' : 'failed',
+        actual_value: passed
+          ? `${mfaAllPolicies.length} מדיניות CA עם MFA לכלל המשתמשים`
+          : `אין מדיניות CA עם MFA לכל המשתמשים (קיימות ${anyMfaPolicies.length} מדיניות MFA אחרות)`,
         expected_value: 'לפחות מדיניות CA אחת המחייבת MFA לכל המשתמשים',
         evidence: {
-          'מדיניות MFA לכולם': mfaAllPolicies.length,
-          'רשימת מדיניות': mfaAllPolicies.map(p => p.displayName).join(', ') || 'אין',
+          'מדיניות MFA לכולם (includeUsers=All)': mfaAllPolicies.map(p => p.displayName).join(', ') || 'אין',
+          'מדיניות MFA אחרות': anyMfaPolicies.filter(p => !mfaAllPolicies.includes(p)).map(p => `${p.displayName} (${JSON.stringify(p.conditions?.users?.includeUsers)})`).join(', ') || 'אין',
           'סך מדיניות CA פעילות': policies.length,
+          'מצב': passed ? 'תקין ✓' : 'MFA אינו מחייב לכל המשתמשים ✗',
         },
       };
     }
@@ -433,24 +456,41 @@ async function runCheck(token, checkId) {
     }
 
     case 'CIS-3.3.2': {
-      // DKIM via DNS-over-HTTPS (selector1._domainkey.domain)
+      // DKIM via DNS-over-HTTPS - check BOTH selector1 and selector2 per domain
       const domainsData = await graphGet(token, '/domains?$filter=isVerified eq true&$select=id');
-      const customDomains = (domainsData.value || []).filter(d => !d.id.endsWith('.onmicrosoft.com'));
+      const customDomains = (domainsData.value || []).filter(d => !d.id.endsWith('.onmicrosoft.com') && !d.id.endsWith('.mail.onmicrosoft.com'));
       if (customDomains.length === 0) {
         return { status: 'not_applicable', actual_value: 'אין דומיינים מותאמים', expected_value: 'לא רלוונטי', evidence: { 'דומיינים': 'רק onmicrosoft.com' } };
       }
-      const results = {};
-      for (const domain of customDomains.slice(0, 5)) {
-        const dns = await dnsQuery(`selector1._domainkey.${domain.id}`, 'CNAME');
-        const hasRecord = (dns.Answer || []).length > 0;
-        results[domain.id] = hasRecord ? `CNAME: ${dns.Answer[0]?.data || 'קיים'}` : 'לא נמצא';
+      const evidence = {};
+      const perDomainStatus = {};
+      for (const domain of customDomains.slice(0, 6)) {
+        const [dns1, dns2] = await Promise.all([
+          dnsQuery(`selector1._domainkey.${domain.id}`, 'CNAME'),
+          dnsQuery(`selector2._domainkey.${domain.id}`, 'CNAME'),
+        ]);
+        const has1 = (dns1.Answer || []).length > 0;
+        const has2 = (dns2.Answer || []).length > 0;
+        if (has1 || has2) {
+          evidence[`${domain.id} - selector1`] = has1 ? `✓ ${dns1.Answer[0]?.data || 'CNAME קיים'}` : '✗ חסר';
+          evidence[`${domain.id} - selector2`] = has2 ? `✓ ${dns2.Answer[0]?.data || 'CNAME קיים'}` : '✗ חסר';
+          perDomainStatus[domain.id] = (has1 && has2) ? 'מלא' : 'חלקי';
+        } else {
+          evidence[`${domain.id}`] = '✗ DKIM לא מוגדר (selector1 + selector2 חסרים)';
+          perDomainStatus[domain.id] = 'חסר';
+        }
       }
-      const allHaveDKIM = Object.values(results).every(v => v !== 'לא נמצא');
+      const allFull = Object.values(perDomainStatus).every(v => v === 'מלא');
+      const anyMissing = Object.values(perDomainStatus).some(v => v === 'חסר');
+      const domainsWithDkim = Object.entries(perDomainStatus).filter(([,v]) => v !== 'חסר').map(([k]) => k);
+      const domainsWithoutDkim = Object.entries(perDomainStatus).filter(([,v]) => v === 'חסר').map(([k]) => k);
       return {
-        status: allHaveDKIM ? 'passed' : 'failed',
-        actual_value: allHaveDKIM ? 'DKIM מוגדר בכל הדומיינים' : 'חסר DKIM בחלק מהדומיינים',
-        expected_value: 'CNAME records for selector1._domainkey.domain and selector2._domainkey.domain',
-        evidence: { ...results, 'מצב': allHaveDKIM ? 'תקין ✓' : 'דורש הפעלה ✗' },
+        status: allFull ? 'passed' : anyMissing ? 'failed' : 'warning',
+        actual_value: anyMissing
+          ? `DKIM חסר: ${domainsWithoutDkim.join(', ')}${domainsWithDkim.length > 0 ? ` | מוגדר: ${domainsWithDkim.join(', ')}` : ''}`
+          : `DKIM מוגדר בכל הדומיינים (${domainsWithDkim.join(', ')})`,
+        expected_value: 'selector1 + selector2 CNAME records לכל דומיין מותאם',
+        evidence: { ...evidence, 'מצב': allFull ? 'תקין ✓' : anyMissing ? 'דורש הפעלה ✗' : 'חלקי ⚠' },
       };
     }
 
@@ -511,49 +551,90 @@ async function runCheck(token, checkId) {
 
     case 'CIS-4.1.1': {
       const score = await getSecureScoreControls(token);
-      const ctrl = getControl(score, 'SafeAttachments') || getControl(score, 'safeattachment');
-      const implemented = ctrl && (ctrl.score > 0 || ctrl.implementationStatus === 'Implemented');
+      // Try multiple known control names for Safe Attachments
+      const ctrl = getControl(score, 'safeattach', 'SafeAttach', 'MDOSafeAttachment', 'safeattachmentforall', 'EnableSafeAttachment');
+      const implemented = ctrl && (ctrl.score > 0 || ctrl.implementationStatus === 'Implemented' || ctrl.implementationStatus === 'implemented');
+      // Fallback: search all controls for anything attachment-related
+      const allCtrl = !ctrl && score?.controlScores?.find(c => c.controlName?.toLowerCase().includes('attach'));
+      const effectiveCtrl = ctrl || allCtrl;
+      const effectiveImplemented = effectiveCtrl && (effectiveCtrl.score > 0 || effectiveCtrl.implementationStatus === 'Implemented');
       return {
-        status: ctrl ? (implemented ? 'passed' : 'failed') : 'warning',
-        actual_value: ctrl ? (implemented ? 'Safe Attachments מופעל' : 'Safe Attachments לא מופעל') : 'לא נמצא ב-Secure Score',
+        status: effectiveCtrl ? (effectiveImplemented ? 'passed' : 'failed') : 'warning',
+        actual_value: effectiveCtrl
+          ? (effectiveImplemented ? `Safe Attachments מופעל (${effectiveCtrl.controlName})` : `Safe Attachments לא מופעל (${effectiveCtrl.controlName})`)
+          : 'לא נמצא ב-Secure Score — ייתכן שדורש Defender for Office 365 Plan 1',
         expected_value: 'Safe Attachments policy enabled for all users',
-        evidence: ctrl ? {
-          'ציון Secure Score': `${ctrl.score}/${ctrl.maxScore}`,
-          'סטטוס': ctrl.implementationStatus || 'לא ידוע',
-          'מצב': implemented ? 'תקין ✓' : 'דורש הפעלה ✗',
-        } : { 'הערה': 'בדוק ב-Microsoft Defender > Policies > Safe attachments' },
+        evidence: effectiveCtrl ? {
+          'שם בקרה': effectiveCtrl.controlName,
+          'ציון Secure Score': `${effectiveCtrl.score}/${effectiveCtrl.maxScore}`,
+          'סטטוס': effectiveCtrl.implementationStatus || 'לא ידוע',
+          'מצב': effectiveImplemented ? 'תקין ✓' : 'דורש הפעלה ✗',
+        } : {
+          'הערה': 'בדוק ב-Microsoft Defender > Policies > Safe attachments',
+          'כל בקרות Secure Score (attachment)': (score?.controlScores || []).filter(c => c.controlName?.toLowerCase().includes('attach')).map(c => c.controlName).join(', ') || 'אין',
+        },
       };
     }
 
     case 'CIS-4.1.2': {
       const score = await getSecureScoreControls(token);
-      const ctrl = getControl(score, 'SafeLinks') || getControl(score, 'safelinks');
-      const implemented = ctrl && (ctrl.score > 0 || ctrl.implementationStatus === 'Implemented');
+      const ctrl = getControl(score, 'safelink', 'SafeLink', 'EnableSafeLinks', 'MDOSafeLink');
+      const allCtrl = !ctrl && score?.controlScores?.find(c => c.controlName?.toLowerCase().includes('link'));
+      const effectiveCtrl = ctrl || allCtrl;
+      const effectiveImplemented = effectiveCtrl && (effectiveCtrl.score > 0 || effectiveCtrl.implementationStatus === 'Implemented');
       return {
-        status: ctrl ? (implemented ? 'passed' : 'failed') : 'warning',
-        actual_value: ctrl ? (implemented ? 'Safe Links מופעל' : 'Safe Links לא מופעל') : 'לא נמצא ב-Secure Score',
+        status: effectiveCtrl ? (effectiveImplemented ? 'passed' : 'failed') : 'warning',
+        actual_value: effectiveCtrl
+          ? (effectiveImplemented ? `Safe Links מופעל (${effectiveCtrl.controlName})` : `Safe Links לא מופעל (${effectiveCtrl.controlName})`)
+          : 'לא נמצא ב-Secure Score — ייתכן שדורש Defender for Office 365 Plan 1',
         expected_value: 'Safe Links policy enabled for Email and Office apps',
-        evidence: ctrl ? {
-          'ציון Secure Score': `${ctrl.score}/${ctrl.maxScore}`,
-          'סטטוס': ctrl.implementationStatus || 'לא ידוע',
-          'מצב': implemented ? 'תקין ✓' : 'דורש הפעלה ✗',
-        } : { 'הערה': 'בדוק ב-Microsoft Defender > Policies > Safe links' },
+        evidence: effectiveCtrl ? {
+          'שם בקרה': effectiveCtrl.controlName,
+          'ציון Secure Score': `${effectiveCtrl.score}/${effectiveCtrl.maxScore}`,
+          'סטטוס': effectiveCtrl.implementationStatus || 'לא ידוע',
+          'מצב': effectiveImplemented ? 'תקין ✓' : 'דורש הפעלה ✗',
+        } : {
+          'הערה': 'בדוק ב-Microsoft Defender > Policies > Safe links',
+          'כל בקרות Secure Score (link)': (score?.controlScores || []).filter(c => c.controlName?.toLowerCase().includes('link')).map(c => c.controlName).join(', ') || 'אין',
+        },
       };
     }
 
     case 'CIS-4.2.1': {
       const score = await getSecureScoreControls(token);
-      const ctrl = getControl(score, 'AntiphishPolicy') || getControl(score, 'antiphish');
-      const implemented = ctrl && (ctrl.score > 0 || ctrl.implementationStatus === 'Implemented');
+      // Try multiple known control names for Anti-Phishing
+      const ctrl = getControl(score, 'antiphish', 'AntiPhish', 'phishing', 'Phishing', 'setEmailAntiPhishing', 'EnableAntiPhishing');
+      const allCtrl = !ctrl && score?.controlScores?.find(c => c.controlName?.toLowerCase().includes('phish'));
+      const effectiveCtrl = ctrl || allCtrl;
+      const effectiveImplemented = effectiveCtrl && (effectiveCtrl.score > 0 || effectiveCtrl.implementationStatus === 'Implemented');
+      // Also check for Anti-Spam via Secure Score
+      const spamCtrl = getControl(score, 'antispam', 'AntiSpam', 'spam', 'setEmailAntiSpam');
+      const spamAllCtrl = !spamCtrl && score?.controlScores?.find(c => c.controlName?.toLowerCase().includes('spam'));
+      const effectiveSpamCtrl = spamCtrl || spamAllCtrl;
+      const spamImplemented = effectiveSpamCtrl && (effectiveSpamCtrl.score > 0 || effectiveSpamCtrl.implementationStatus === 'Implemented');
       return {
-        status: ctrl ? (implemented ? 'passed' : 'failed') : 'warning',
-        actual_value: ctrl ? (implemented ? 'Anti-Phishing מופעל' : 'Anti-Phishing לא מופעל') : 'לא נמצא',
+        status: effectiveCtrl ? (effectiveImplemented ? 'passed' : 'failed') : 'warning',
+        actual_value: effectiveCtrl
+          ? (effectiveImplemented ? `Anti-Phishing מופעל (${effectiveCtrl.controlName})` : `Anti-Phishing לא מופעל (${effectiveCtrl.controlName})`)
+          : 'לא נמצא ב-Secure Score',
         expected_value: 'Anti-phishing policy with impersonation protection enabled',
-        evidence: ctrl ? {
-          'ציון Secure Score': `${ctrl.score}/${ctrl.maxScore}`,
-          'סטטוס': ctrl.implementationStatus || 'לא ידוע',
-          'מצב': implemented ? 'תקין ✓' : 'דורש הגדרה ✗',
-        } : { 'הערה': 'בדוק ב-Microsoft Defender > Anti-phishing policies' },
+        evidence: {
+          ...(effectiveCtrl ? {
+            'Anti-Phishing - שם בקרה': effectiveCtrl.controlName,
+            'Anti-Phishing - ציון': `${effectiveCtrl.score}/${effectiveCtrl.maxScore}`,
+            'Anti-Phishing - סטטוס': effectiveCtrl.implementationStatus || 'לא ידוע',
+            'Anti-Phishing - מצב': effectiveImplemented ? 'תקין ✓' : 'דורש הגדרה ✗',
+          } : { 'Anti-Phishing': 'לא נמצא — בדוק ב-Microsoft Defender > Anti-phishing policies' }),
+          ...(effectiveSpamCtrl ? {
+            'Anti-Spam - שם בקרה': effectiveSpamCtrl.controlName,
+            'Anti-Spam - ציון': `${effectiveSpamCtrl.score}/${effectiveSpamCtrl.maxScore}`,
+            'Anti-Spam - סטטוס': effectiveSpamCtrl.implementationStatus || 'לא ידוע',
+            'Anti-Spam - מצב': spamImplemented ? 'תקין ✓' : 'דורש הגדרה ✗',
+          } : {}),
+          ...((!effectiveCtrl || !effectiveSpamCtrl) ? {
+            'כל בקרות זמינות (email)': (score?.controlScores || []).filter(c => ['phish','spam','malware','attach','link','mail'].some(k => c.controlName?.toLowerCase().includes(k))).map(c => `${c.controlName}(${c.score}/${c.maxScore})`).join(' | ') || 'אין',
+          } : {}),
+        },
       };
     }
 
