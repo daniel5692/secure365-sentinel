@@ -160,7 +160,7 @@ async function runCheck(token, checkId) {
     }
 
     case 'CIS-1.3.1': {
-      const domainsData = await graphGet(token, '/domains?$select=id,passwordValidityPeriodInDays,passwordNotificationWindowInDays,isVerified');
+      const domainsData = await graphGet(token, '/domains?$select=id,passwordValidityPeriodInDays,isVerified');
       const domains = (domainsData.value || []).filter(d => d.isVerified);
       const expiring = domains.filter(d => d.passwordValidityPeriodInDays !== 2147483647 && d.passwordValidityPeriodInDays !== null);
       return {
@@ -435,8 +435,8 @@ async function runCheck(token, checkId) {
 
     case 'CIS-3.3.1': {
       // SPF via DNS-over-HTTPS for all custom domains
-      const domainsData = await graphGet(token, '/domains?$filter=isVerified eq true&$select=id');
-      const customDomains = (domainsData.value || []).filter(d => !d.id.endsWith('.onmicrosoft.com') && !d.id.endsWith('.mail.onmicrosoft.com'));
+      const domainsData = await graphGet(token, '/domains?$select=id,isVerified');
+      const customDomains = (domainsData.value || []).filter(d => d.isVerified && !d.id.endsWith('.onmicrosoft.com') && !d.id.endsWith('.mail.onmicrosoft.com'));
       if (customDomains.length === 0) {
         return { status: 'not_applicable', actual_value: 'אין דומיינים מותאמים', expected_value: 'לא רלוונטי', evidence: { 'דומיינים': 'רק onmicrosoft.com' } };
       }
@@ -457,8 +457,8 @@ async function runCheck(token, checkId) {
 
     case 'CIS-3.3.2': {
       // DKIM via DNS-over-HTTPS - check BOTH selector1 and selector2 per domain
-      const domainsData = await graphGet(token, '/domains?$filter=isVerified eq true&$select=id');
-      const customDomains = (domainsData.value || []).filter(d => !d.id.endsWith('.onmicrosoft.com') && !d.id.endsWith('.mail.onmicrosoft.com'));
+      const domainsData = await graphGet(token, '/domains?$select=id,isVerified');
+      const customDomains = (domainsData.value || []).filter(d => d.isVerified && !d.id.endsWith('.onmicrosoft.com') && !d.id.endsWith('.mail.onmicrosoft.com'));
       if (customDomains.length === 0) {
         return { status: 'not_applicable', actual_value: 'אין דומיינים מותאמים', expected_value: 'לא רלוונטי', evidence: { 'דומיינים': 'רק onmicrosoft.com' } };
       }
@@ -496,8 +496,8 @@ async function runCheck(token, checkId) {
 
     case 'CIS-3.3.3': {
       // DMARC via DNS-over-HTTPS
-      const domainsData = await graphGet(token, '/domains?$filter=isVerified eq true&$select=id');
-      const customDomains = (domainsData.value || []).filter(d => !d.id.endsWith('.onmicrosoft.com'));
+      const domainsData = await graphGet(token, '/domains?$select=id,isVerified');
+      const customDomains = (domainsData.value || []).filter(d => d.isVerified && !d.id.endsWith('.onmicrosoft.com'));
       if (customDomains.length === 0) {
         return { status: 'not_applicable', actual_value: 'אין דומיינים מותאמים', expected_value: 'לא רלוונטי', evidence: { 'דומיינים': 'רק onmicrosoft.com' } };
       }

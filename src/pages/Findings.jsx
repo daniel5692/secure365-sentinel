@@ -16,7 +16,7 @@ export default function Findings() {
   const [severityFilter, setSeverityFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [domainFilter, setDomainFilter] = useState('all');
-  const [selectedFinding, setSelectedFinding] = useState(null);
+  const [expandedFinding, setExpandedFinding] = useState(null);
 
   // Read scan param from URL
   const urlParams = new URLSearchParams(window.location.search);
@@ -42,10 +42,6 @@ export default function Findings() {
     if (domainFilter !== 'all' && r.domain !== domainFilter) return false;
     return true;
   });
-
-  if (selectedFinding) {
-    return <FindingDetail finding={selectedFinding} onBack={() => setSelectedFinding(null)} />;
-  }
 
   return (
     <div className="space-y-6">
@@ -134,32 +130,36 @@ export default function Findings() {
           </div>
           <div className="divide-y divide-border">
             {filtered.map(result => (
-              <div
-                key={result.id}
-                className="grid grid-cols-12 gap-4 p-4 items-center hover:bg-secondary/20 transition-colors cursor-pointer"
-                onClick={() => setSelectedFinding(result)}
-              >
-                <div className="col-span-1">
-                  <code className="text-[10px] font-mono text-primary">{result.check_id}</code>
+              <div key={result.id}>
+                <div
+                  className="grid grid-cols-12 gap-4 p-4 items-center hover:bg-secondary/20 transition-colors cursor-pointer"
+                  onClick={() => setExpandedFinding(expandedFinding === result.id ? null : result.id)}
+                >
+                  <div className="col-span-1">
+                    <code className="text-[10px] font-mono text-primary">{result.check_id}</code>
+                  </div>
+                  <div className="col-span-4">
+                    <div className="text-xs font-medium text-foreground">{result.check_title}</div>
+                    {result.explanation_he && (
+                      <div className="text-[10px] text-muted-foreground mt-0.5 truncate">{result.explanation_he}</div>
+                    )}
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-xs text-muted-foreground">{DOMAIN_META[result.domain]?.labelHe || result.domain || '—'}</span>
+                  </div>
+                  <div className="col-span-2">
+                    <SeverityBadge severity={result.severity} size="sm" />
+                  </div>
+                  <div className="col-span-2">
+                    <StatusBadge status={result.status} size="sm" />
+                  </div>
+                  <div className="col-span-1 flex justify-end">
+                    <ChevronLeft className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${expandedFinding === result.id ? '-rotate-90' : ''}`} />
+                  </div>
                 </div>
-                <div className="col-span-4">
-                  <div className="text-xs font-medium text-foreground">{result.check_title}</div>
-                  {result.explanation_he && (
-                    <div className="text-[10px] text-muted-foreground mt-0.5 truncate">{result.explanation_he}</div>
-                  )}
-                </div>
-                <div className="col-span-2">
-                  <span className="text-xs text-muted-foreground">{DOMAIN_META[result.domain]?.labelHe || result.domain || '—'}</span>
-                </div>
-                <div className="col-span-2">
-                  <SeverityBadge severity={result.severity} size="sm" />
-                </div>
-                <div className="col-span-2">
-                  <StatusBadge status={result.status} size="sm" />
-                </div>
-                <div className="col-span-1 flex justify-end">
-                  <ChevronLeft className="w-4 h-4 text-muted-foreground" />
-                </div>
+                {expandedFinding === result.id && (
+                  <FindingDetail finding={result} />
+                )}
               </div>
             ))}
           </div>

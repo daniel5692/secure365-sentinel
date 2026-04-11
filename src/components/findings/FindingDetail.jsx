@@ -1,4 +1,4 @@
-import { ArrowRight, Shield, AlertTriangle, CheckCircle2, XCircle, Info, Wrench } from "lucide-react";
+import { Shield, AlertTriangle, CheckCircle2, XCircle, Info, Wrench } from "lucide-react";
 import SeverityBadge from "@/components/shared/SeverityBadge";
 import StatusBadge from "@/components/shared/StatusBadge";
 import { DOMAIN_META } from "@/lib/security-checks";
@@ -71,18 +71,12 @@ function ValueComparison({ actual, expected, status }) {
   );
 }
 
-export default function FindingDetail({ finding, onBack }) {
+export default function FindingDetail({ finding }) {
   const checkDef = getAllChecks().find(c => c.id === finding.check_id);
   const domainMeta = DOMAIN_META[finding.domain];
 
   return (
-    <div className="space-y-5">
-      {/* Back */}
-      <button onClick={onBack} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-        <ArrowRight className="w-4 h-4" />
-        חזרה לממצאים
-      </button>
-
+    <div className="p-5 bg-secondary/10 border-t border-border space-y-5">
       {/* Header */}
       <div className="bg-card border border-border rounded-xl p-6">
         <div className="flex items-start gap-4">
