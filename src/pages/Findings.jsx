@@ -28,8 +28,10 @@ export default function Findings() {
       base44.entities.CheckResult.list('-created_date', 500),
       base44.entities.ScanJob.list('-created_date', 50),
     ]).then(([r, s]) => {
-      setResults(r);
-      setScans(s.filter(sc => sc.status === 'completed'));
+      const completedScans = s.filter(sc => sc.status === 'completed');
+      const validScanIds = new Set(completedScans.map(sc => sc.id));
+      setResults(r.filter(res => validScanIds.has(res.scan_job_id)));
+      setScans(completedScans);
       setLoading(false);
     });
   }, []);
