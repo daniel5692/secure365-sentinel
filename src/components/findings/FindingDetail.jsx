@@ -14,6 +14,16 @@ function parseEvidence(evidenceStr) {
   }
 }
 
+function stripHtml(str) {
+  return str.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim();
+}
+
+function formatScore(val) {
+  // Fix "X/undefined" by showing just the number if maxScore is missing
+  if (typeof val === 'string' && val.includes('/undefined')) return val.replace('/undefined', '');
+  return val;
+}
+
 function EvidenceCard({ evidence }) {
   const parsed = parseEvidence(evidence);
   const entries = Object.entries(parsed);
@@ -21,20 +31,12 @@ function EvidenceCard({ evidence }) {
   return (
     <div className="space-y-2">
       {entries.map(([key, value]) => {
-        const strVal = String(value);
+        let strVal = String(value);
+        // Strip HTML tags from evidence values
+        if (strVal.includes('<')) strVal = stripHtml(strVal);
+        strVal = formatScore(strVal);
         const isGood = strVal.includes('✓');
         const isBad = strVal.includes('✗');
-        return (
-          <div key={key} className="flex items-start justify-between gap-4 py-2.5 border-b border-border/50 last:border-0">
-            <span className="text-xs text-muted-foreground flex-shrink-0 mt-0.5">{key}</span>
-            <span className={cn(
-              "text-xs font-medium text-left leading-relaxed",
-              isGood ? "text-green-400" : isBad ? "text-red-400" : "text-foreground"
-            )} dir="ltr">
-              {strVal}
-            </span>
-          </div>
-        );
       })}
     </div>
   );

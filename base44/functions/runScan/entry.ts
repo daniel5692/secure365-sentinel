@@ -392,7 +392,7 @@ async function runCheck(token, checkId) {
           actual_value: implemented ? 'אימות מודרני מופעל' : 'אימות מודרני לא מופעל',
           expected_value: 'OAuth2ClientProfileEnabled = True',
           evidence: {
-            'ציון Secure Score': `${ctrl.score}/${ctrl.maxScore}`,
+            'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
             'סטטוס': ctrl.implementationStatus || 'לא ידוע',
             'שם בקרה': ctrl.controlName,
             'מצב': implemented ? 'תקין ✓' : 'דורש הפעלה ✗',
@@ -418,7 +418,7 @@ async function runCheck(token, checkId) {
           actual_value: implemented ? 'העברה אוטומטית חסומה' : 'העברה אוטומטית פעילה',
           expected_value: 'AutoForwardEnabled = False על כל Remote Domains',
           evidence: {
-            'ציון Secure Score': `${ctrl.score}/${ctrl.maxScore}`,
+            'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
             'סטטוס': ctrl.implementationStatus || 'לא ידוע',
             'מצב': implemented ? 'תקין ✓' : 'דורש חסימה ✗',
           },
@@ -533,7 +533,7 @@ async function runCheck(token, checkId) {
           actual_value: implemented ? 'Mailbox Audit מופעל' : 'Mailbox Audit לא מופעל',
           expected_value: 'AuditDisabled = False לכל תיבות הדואר',
           evidence: {
-            'ציון Secure Score': `${ctrl.score}/${ctrl.maxScore}`,
+            'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
             'סטטוס': ctrl.implementationStatus || 'לא ידוע',
             'מצב': implemented ? 'תקין ✓' : 'דורש הפעלה ✗',
           },
@@ -621,13 +621,13 @@ async function runCheck(token, checkId) {
         evidence: {
           ...(effectiveCtrl ? {
             'Anti-Phishing - שם בקרה': effectiveCtrl.controlName,
-            'Anti-Phishing - ציון': `${effectiveCtrl.score}/${effectiveCtrl.maxScore}`,
+            'Anti-Phishing - ציון': `${effectiveCtrl.score != null ? effectiveCtrl.score : '?'}${effectiveCtrl.maxScore != null ? '/' + effectiveCtrl.maxScore : ''}`,
             'Anti-Phishing - סטטוס': effectiveCtrl.implementationStatus || 'לא ידוע',
             'Anti-Phishing - מצב': effectiveImplemented ? 'תקין ✓' : 'דורש הגדרה ✗',
           } : { 'Anti-Phishing': 'לא נמצא — בדוק ב-Microsoft Defender > Anti-phishing policies' }),
           ...(effectiveSpamCtrl ? {
             'Anti-Spam - שם בקרה': effectiveSpamCtrl.controlName,
-            'Anti-Spam - ציון': `${effectiveSpamCtrl.score}/${effectiveSpamCtrl.maxScore}`,
+            'Anti-Spam - ציון': `${effectiveSpamCtrl.score != null ? effectiveSpamCtrl.score : '?'}${effectiveSpamCtrl.maxScore != null ? '/' + effectiveSpamCtrl.maxScore : ''}`,
             'Anti-Spam - סטטוס': effectiveSpamCtrl.implementationStatus || 'לא ידוע',
             'Anti-Spam - מצב': spamImplemented ? 'תקין ✓' : 'דורש הגדרה ✗',
           } : {}),
@@ -667,7 +667,7 @@ async function runCheck(token, checkId) {
         actual_value: ctrl ? (implemented ? 'Customer Lockbox מופעל' : 'Customer Lockbox לא מופעל') : 'לא נמצא',
         expected_value: 'Customer Lockbox = Enabled',
         evidence: ctrl ? {
-          'ציון Secure Score': `${ctrl.score}/${ctrl.maxScore}`,
+          'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
           'סטטוס': ctrl.implementationStatus || 'לא ידוע',
           'מצב': implemented ? 'תקין ✓' : 'דורש הפעלה ✗',
         } : { 'הערה': 'M365 Admin Center > Settings > Org settings > Customer Lockbox' },
@@ -685,7 +685,7 @@ async function runCheck(token, checkId) {
         actual_value: ctrl ? (implemented ? 'שיתוף חיצוני מוגבל' : 'שיתוף חיצוני פתוח') : 'לא נמצא ב-Secure Score',
         expected_value: 'External sharing = New and existing guests (לא "Anyone")',
         evidence: ctrl ? {
-          'ציון Secure Score': `${ctrl.score}/${ctrl.maxScore}`,
+          'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
           'סטטוס': ctrl.implementationStatus || 'לא ידוע',
           'מצב': implemented ? 'תקין ✓' : 'שיתוף "Anyone" פעיל ✗',
         } : { 'הערה': 'SharePoint Admin Center > Policies > Sharing' },
@@ -701,7 +701,7 @@ async function runCheck(token, checkId) {
         actual_value: ctrl ? (implemented ? 'שיתוף OneDrive מוגבל' : 'שיתוף OneDrive פתוח') : 'לא נמצא',
         expected_value: 'OneDrive sharing ≤ New and existing guests',
         evidence: ctrl ? {
-          'ציון Secure Score': `${ctrl.score}/${ctrl.maxScore}`,
+          'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
           'סטטוס': ctrl.implementationStatus || 'לא ידוע',
           'מצב': implemented ? 'תקין ✓' : 'שיתוף OneDrive פתוח ✗',
         } : { 'הערה': 'SharePoint Admin Center > OneDrive > Sharing' },
@@ -717,7 +717,7 @@ async function runCheck(token, checkId) {
         actual_value: ctrl ? (implemented ? 'Legacy Auth מושבת ב-SharePoint' : 'Legacy Auth פעיל ב-SharePoint') : 'לא נמצא',
         expected_value: 'LegacyAuthProtocolsEnabled = False',
         evidence: ctrl ? {
-          'ציון Secure Score': `${ctrl.score}/${ctrl.maxScore}`,
+          'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
           'סטטוס': ctrl.implementationStatus || 'לא ידוע',
           'מצב': implemented ? 'תקין ✓' : 'Legacy Auth פעיל ✗',
         } : { 'הערה': 'PowerShell: Set-SPOTenant -LegacyAuthProtocolsEnabled $false' },
@@ -733,7 +733,7 @@ async function runCheck(token, checkId) {
         actual_value: ctrl ? (implemented ? 'סנכרון OneDrive מוגבל לדומיין' : 'סנכרון ללא הגבלת דומיין') : 'לא נמצא',
         expected_value: 'AllowedDomainGuids מוגדר ל-OneDrive Sync',
         evidence: ctrl ? {
-          'ציון Secure Score': `${ctrl.score}/${ctrl.maxScore}`,
+          'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
           'סטטוס': ctrl.implementationStatus || 'לא ידוע',
           'מצב': implemented ? 'תקין ✓' : 'ניתן לסנכרן מכל התקן ✗',
         } : { 'הערה': 'SharePoint Admin Center > Settings > Sync' },
@@ -751,7 +751,7 @@ async function runCheck(token, checkId) {
         actual_value: ctrl ? (implemented ? 'גישה חיצונית Teams מוגבלת' : 'גישה חיצונית Teams פתוחה') : 'לא נמצא',
         expected_value: 'External access restricted to specific allowed domains only',
         evidence: ctrl ? {
-          'ציון Secure Score': `${ctrl.score}/${ctrl.maxScore}`,
+          'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
           'סטטוס': ctrl.implementationStatus || 'לא ידוע',
           'מצב': implemented ? 'תקין ✓' : 'גישה מכל דומיין אפשרית ✗',
         } : { 'הערה': 'Teams Admin Center > Users > External access' },
@@ -767,7 +767,7 @@ async function runCheck(token, checkId) {
         actual_value: ctrl ? (implemented ? 'גישת אורחים Teams מוגדרת בבטחה' : 'הגדרות אורחים Teams לא מאובטחות') : 'לא נמצא',
         expected_value: 'Guest access with limited permissions (no private calling)',
         evidence: ctrl ? {
-          'ציון Secure Score': `${ctrl.score}/${ctrl.maxScore}`,
+          'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
           'סטטוס': ctrl.implementationStatus || 'לא ידוע',
           'מצב': implemented ? 'תקין ✓' : 'הגדרות אורחים לא מאובטחות ✗',
         } : { 'הערה': 'Teams Admin Center > Users > Guest access' },
@@ -783,7 +783,7 @@ async function runCheck(token, checkId) {
         actual_value: ctrl ? (implemented ? 'אנונימיים לא יכולים להתחיל פגישות' : 'אנונימיים יכולים להתחיל פגישות') : 'לא נמצא',
         expected_value: 'AllowAnonymousUsersToStartMeeting = False',
         evidence: ctrl ? {
-          'ציון Secure Score': `${ctrl.score}/${ctrl.maxScore}`,
+          'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
           'סטטוס': ctrl.implementationStatus || 'לא ידוע',
           'מצב': implemented ? 'תקין ✓' : 'פגישות פתוחות לאנונימיים ✗',
         } : { 'הערה': 'Teams Admin Center > Meetings > Meeting policies > Allow anonymous users to start meetings' },
@@ -799,7 +799,7 @@ async function runCheck(token, checkId) {
         actual_value: ctrl ? (implemented ? 'הקלטות מאוחסנות ב-OneDrive/SharePoint' : 'הגדרות הקלטה לא אופטימליות') : 'לא נמצא',
         expected_value: 'Recording storage = OneDrive (default in new Teams)',
         evidence: ctrl ? {
-          'ציון Secure Score': `${ctrl.score}/${ctrl.maxScore}`,
+          'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
           'סטטוס': ctrl.implementationStatus || 'לא ידוע',
           'מצב': implemented ? 'תקין ✓' : 'בדוק הגדרות ✗',
         } : { 'הערה': 'גרסאות Teams מודרניות שומרות ב-OneDrive אוטומטית' },
@@ -817,7 +817,7 @@ async function runCheck(token, checkId) {
         actual_value: ctrl ? (implemented ? 'יומן ביקורת מאוחד פעיל' : 'יומן ביקורת לא פעיל') : 'לא נמצא',
         expected_value: 'Unified Audit Log enabled in Microsoft Purview',
         evidence: ctrl ? {
-          'ציון Secure Score': `${ctrl.score}/${ctrl.maxScore}`,
+          'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
           'סטטוס': ctrl.implementationStatus || 'לא ידוע',
           'מצב': implemented ? 'תקין ✓' : 'יומן ביקורת לא פעיל ✗',
         } : { 'הערה': 'Microsoft Purview > Audit > Start recording user and admin activity' },
@@ -833,7 +833,7 @@ async function runCheck(token, checkId) {
         actual_value: ctrl ? (implemented ? 'מדיניות DLP פעילה' : 'אין מדיניות DLP') : 'לא נמצא',
         expected_value: 'לפחות מדיניות DLP פעילה אחת ב-Exchange, SharePoint, Teams',
         evidence: ctrl ? {
-          'ציון Secure Score': `${ctrl.score}/${ctrl.maxScore}`,
+          'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
           'סטטוס': ctrl.implementationStatus || 'לא ידוע',
           'מצב': implemented ? 'תקין ✓' : 'אין הגנת DLP ✗',
         } : { 'הערה': 'Microsoft Purview > Data loss prevention > Policies' },
@@ -849,7 +849,7 @@ async function runCheck(token, checkId) {
         actual_value: ctrl ? (implemented ? 'תוויות רגישות מוגדרות' : 'אין תוויות רגישות') : 'לא נמצא',
         expected_value: 'Sensitivity labels created and published to users',
         evidence: ctrl ? {
-          'ציון Secure Score': `${ctrl.score}/${ctrl.maxScore}`,
+          'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
           'סטטוס': ctrl.implementationStatus || 'לא ידוע',
           'מצב': implemented ? 'תקין ✓' : 'אין תוויות סיווג ✗',
         } : { 'הערה': 'Microsoft Purview > Information protection > Labels' },
