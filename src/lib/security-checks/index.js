@@ -10,6 +10,8 @@ import './domains/teams';
 import './domains/purview';
 import './domains/m365AdminCenter';
 import './domains/defenderEmailSecurity';
+import './domains/intune';
+import './domains/entraIdExtended';
 
 // Re-export registry for convenience
 export {
