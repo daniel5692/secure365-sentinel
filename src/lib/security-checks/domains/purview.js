@@ -31,6 +31,21 @@ registerCheck({
 });
 
 registerCheck({
+  id: 'CIS-3.2.2',
+  title: 'Ensure DLP policies are enabled for Microsoft Teams',
+  titleHe: 'ודא שמדיניות DLP מופעלת עבור Microsoft Teams',
+  descriptionHe: 'מדיניות DLP חייבת לכלול במפורש את Microsoft Teams כמיקום, כדי שתחול על הודעות צ\u05f3אט ועל הודעות בערוצים. DLP כללי ל-Exchange/SharePoint לא מכסה אוטומטית Teams.',
+  category: 'Purview / Compliance', domain: 'purview', severity: 'high',
+  benchmarkRef: 'CIS M365 v6.0.1 - 3.2.2', framework: 'cis_m365',
+  expectedState: 'At least one active DLP policy with Microsoft Teams location enabled',
+  remediationHe: 'Microsoft Purview portal (purview.microsoft.com) \u2192 Solutions \u2192 Data loss prevention \u2192 Policies \u2192 צור policy חדשה או ערוך קיימת \u2192 Locations \u2192 הפעל "Microsoft Teams chat and channel messages" \u2192 הגדר rules לגילוי מידע רגיש (PII, כרטיסי אשראי, נתוני בריאות) \u2192 Action: Block or Notify \u2192 Turn it on \u2192 Save.',
+  whyItMattersHe: 'Teams הפך לאפיק תקשורת ראשי. ללא DLP ל-Teams, מידע רגיש כמו מספרי זהות ופרטי לקוחות יכול לזלוג בחופשיות בצ\u05f3אטים פנימיים וחיצוניים.',
+  graphApiEndpoint: null,
+  requiredPermissions: [],
+  isAutomated: false,
+});
+
+registerCheck({
   id: 'CIS-7.3.1',
   title: 'Ensure sensitivity labels are configured and published',
   titleHe: 'ודא שתוויות רגישות מוגדרות ומפורסמות',
