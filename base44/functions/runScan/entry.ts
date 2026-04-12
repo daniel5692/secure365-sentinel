@@ -146,6 +146,21 @@ function hasMfaControl(policy) {
   );
 }
 
+// Get Teams policy via backend PowerShell function
+async function getPsPolicy(token, policyType, identity = 'Global') {
+  try {
+    const res = await fetch('https://your-base44-app.com/api/functions/getTeamsPolicies', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ policyType, identity }),
+    });
+    if (!res.ok) return { error: `HTTP ${res.status}` };
+    return await res.json();
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+
 // =============================================
 // CIS Microsoft 365 Foundations Benchmark v6.0.1
 // All checks are fully automated
@@ -877,24 +892,68 @@ async function runCheck(token, checkId) {
     }
 
     case 'CIS-6.2.1': {
-      const score = await getSecureScoreControls(token);
-      const ctrl = getControl(score, 'Anonymous') || getControl(score, 'AnonymousMeeting') || getControl(score, 'AllowAnonymousUsersToJoinMeeting');
-      if (ctrl) {
-        const implemented = ctrl.score > 0 || ctrl.implementationStatus === 'Implemented';
-        return {
-          status: implemented ? 'passed' : 'failed',
-          actual_value: implemented ? `${ctrl.controlName}: Implemented (score ${ctrl.score}/${ctrl.maxScore})` : `${ctrl.controlName}: Not Implemented`,
-          expected_value: 'AllowAnonymousUsersToJoinMeeting = False',
-          evidence: {
-            'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
-            'סטטוס': ctrl.implementationStatus || 'לא ידוע',
-            'מצב': implemented ? 'תקין ✓' : 'דורש הגדרה ✗',
-          },
-        };
+      const meetingPolicy = await getPsPolicy(token, 'MeetingPolicy');
+      if (meetingPolicy && !meetingPolicy.error) {
+        const allowAnon = meetingPolicy.AllowAnonymousUsersToJoinMeeting === false;
+        return { status: allowAnon ? 'passed' : 'failed', actual_value: `AllowAnonymousUsersToJoinMeeting: ${meetingPolicy.AllowAnonymousUsersToJoinMeeting}`, expected_value: 'false', evidence: { 'ערך': meetingPolicy.AllowAnonymousUsersToJoinMeeting, 'מצב': allowAnon ? 'תקין ✓' : 'דורש הגדרה ✗' } };
       }
-      return { status: 'manual', actual_value: 'Teams API not accessible via standard Graph', expected_value: 'See Teams Admin Center', evidence: { 'הערה': 'Teams Admin → Meetings → Meeting policies → Anonymous users cannot join' } };
+      return { status: 'warning', actual_value: 'Teams PowerShell not available', expected_value: 'AllowAnonymousUsersToJoinMeeting = False', evidence: { 'הערה': 'דרוש מנהל Teams עם PowerShell Module' } };
     }
-    case 'CIS-8.1.1': case 'CIS-8.1.2': case 'CIS-8.2.1': case 'CIS-8.2.2': case 'CIS-8.5.2': case 'CIS-8.5.3': case 'CIS-8.5.9': {
+    case 'CIS-8.1.1': {
+      const policy = await getPsPolicy(token, 'ClientConfiguration');
+      if (policy && !policy.error) {
+        const blockCloud = policy.BlockedCloudStorageType !== null && policy.BlockedCloudStorageType !== 'None';
+        return { status: blockCloud ? 'passed' : 'failed', actual_value: `BlockedCloudStorageType: ${policy.BlockedCloudStorageType}`, expected_value: 'BlockedCloudStorageType != None', evidence: { 'ערך': policy.BlockedCloudStorageType, 'מצב': blockCloud ? 'תקין ✓' : 'דורש הגדרה ✗' } };
+      }
+      return { status: 'warning', actual_value: 'Teams PowerShell not available', expected_value: 'Cloud storage blocked', evidence: { 'הערה': 'Teams Admin → Teams apps → 3rd party cloud storage: Off' } };
+    }
+    case 'CIS-8.1.2': {
+      const policy = await getPsPolicy(token, 'ClientConfiguration');
+      if (policy && !policy.error) {
+        const emailDisabled = policy.AllowEmailIntoChannel === false;
+        return { status: emailDisabled ? 'passed' : 'failed', actual_value: `AllowEmailIntoChannel: ${policy.AllowEmailIntoChannel}`, expected_value: 'false', evidence: { 'ערך': policy.AllowEmailIntoChannel, 'מצב': emailDisabled ? 'תקין ✓' : 'דורש הגדרה ✗' } };
+      }
+      return { status: 'warning', actual_value: 'Teams PowerShell not available', expected_value: 'Email integration disabled', evidence: { 'הערה': 'Teams Admin → Teams settings → Email integration: Off' } };
+    }
+    case 'CIS-8.2.1': {
+      const policy = await getPsPolicy(token, 'ExternalAccess');
+      if (policy && !policy.error) {
+        const restricted = policy.AllowTeamsConsumer === false && policy.AllowPublicUsers === false;
+        return { status: restricted ? 'passed' : 'failed', actual_value: `AllowTeamsConsumer: ${policy.AllowTeamsConsumer}, AllowPublicUsers: ${policy.AllowPublicUsers}`, expected_value: 'both false', evidence: { 'Consumer': policy.AllowTeamsConsumer, 'Public': policy.AllowPublicUsers, 'מצב': restricted ? 'תקין ✓' : 'דורש הגדרה ✗' } };
+      }
+      return { status: 'warning', actual_value: 'Teams PowerShell not available', expected_value: 'External access restricted', evidence: { 'הערה': 'Teams Admin → Users → External access' } };
+    }
+    case 'CIS-8.2.2': {
+      const policy = await getPsPolicy(token, 'ExternalAccess');
+      if (policy && !policy.error) {
+        const blocked = policy.AllowTeamsConsumer === false;
+        return { status: blocked ? 'passed' : 'failed', actual_value: `AllowTeamsConsumer: ${policy.AllowTeamsConsumer}`, expected_value: 'false', evidence: { 'ערך': policy.AllowTeamsConsumer, 'מצב': blocked ? 'תקין ✓' : 'דורש הגדרה ✗' } };
+      }
+      return { status: 'warning', actual_value: 'Teams PowerShell not available', expected_value: 'Unmanaged Teams blocked', evidence: { 'הערה': 'Teams Admin → Users → External access → Block unmanaged' } };
+    }
+    case 'CIS-8.5.2': {
+      const policy = await getPsPolicy(token, 'MeetingPolicy');
+      if (policy && !policy.error) {
+        const prevented = policy.AllowAnonymousUsersToStartMeeting === false;
+        return { status: prevented ? 'passed' : 'failed', actual_value: `AllowAnonymousUsersToStartMeeting: ${policy.AllowAnonymousUsersToStartMeeting}`, expected_value: 'false', evidence: { 'ערך': policy.AllowAnonymousUsersToStartMeeting, 'מצב': prevented ? 'תקין ✓' : 'דורש הגדרה ✗' } };
+      }
+      return { status: 'warning', actual_value: 'Teams PowerShell not available', expected_value: 'Anonymous cannot start', evidence: { 'הערה': 'Teams Admin → Meetings → Allow anonymous users to start: Off' } };
+    }
+    case 'CIS-8.5.3': {
+      const policy = await getPsPolicy(token, 'MeetingPolicy');
+      if (policy && !policy.error) {
+        const orgOnly = policy.LobbyBypassForPhoneUsers === 'EveryoneInCompanyBypassLobby';
+        return { status: orgOnly ? 'passed' : 'failed', actual_value: `LobbyBypassForPhoneUsers: ${policy.LobbyBypassForPhoneUsers}`, expected_value: 'EveryoneInCompanyBypassLobby', evidence: { 'ערך': policy.LobbyBypassForPhoneUsers, 'מצב': orgOnly ? 'תקין ✓' : 'דורש הגדרה ✗' } };
+      }
+      return { status: 'warning', actual_value: 'Teams PowerShell not available', expected_value: 'Org users only bypass lobby', evidence: { 'הערה': 'Teams Admin → Meetings → Who can bypass lobby' } };
+    }
+    case 'CIS-8.5.9': {
+      const policy = await getPsPolicy(token, 'MeetingPolicy');
+      if (policy && !policy.error) {
+        const disabled = policy.AllowMeetingRecording === false;
+        return { status: disabled ? 'passed' : 'failed', actual_value: `AllowMeetingRecording: ${policy.AllowMeetingRecording}`, expected_value: 'false', evidence: { 'ערך': policy.AllowMeetingRecording, 'מצב': disabled ? 'תקין ✓' : 'דורש הגדרה ✗' } };
+      }
+      return { status: 'warning', actual_value: 'Teams PowerShell not available', expected_value: 'Recording disabled', evidence: { 'הערה': 'Teams Admin → Meetings → Recording: Off' } };
     }
     case 'CIS-8.2.3': case 'CIS-8.2.4': case 'CIS-8.5.4': case 'CIS-8.5.5': case 'CIS-8.5.6': case 'CIS-8.5.7': case 'CIS-8.5.8': case 'CIS-8.6.1': {
       const noteT2 = { 'CIS-8.2.3': 'Teams Admin → External access → External users cannot initiate chats', 'CIS-8.2.4': 'Teams Admin → External access → Block trial tenants', 'CIS-8.5.4': 'Teams Admin → Meetings → Dial-in lobby bypass: Off', 'CIS-8.5.5': 'Teams Admin → Meetings → Chat: Enabled for everyone except anonymous', 'CIS-8.5.6': 'Teams Admin → Meetings → Who can present: Only organizers', 'CIS-8.5.7': 'Teams Admin → Meetings → External participants can give control: Off', 'CIS-8.5.8': 'Teams Admin → Meetings → External users chat in meetings: Off', 'CIS-8.6.1': 'Teams Admin → Messaging policies → Report a security concern: On' };
