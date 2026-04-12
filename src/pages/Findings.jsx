@@ -38,14 +38,28 @@ export default function Findings() {
     });
   }, []);
 
-  const filtered = results.filter(r => {
-    if (selectedScan !== 'all' && r.scan_job_id !== selectedScan) return false;
-    if (search && !r.check_title?.toLowerCase().includes(search.toLowerCase()) && !r.check_id?.toLowerCase().includes(search.toLowerCase())) return false;
-    if (severityFilter !== 'all' && r.severity !== severityFilter) return false;
-    if (statusFilter !== 'all' && r.status !== statusFilter) return false;
-    if (domainFilter !== 'all' && r.domain !== domainFilter) return false;
-    return true;
-  });
+  const filtered = results
+    .filter(r => {
+      if (selectedScan !== 'all' && r.scan_job_id !== selectedScan) return false;
+      if (search && !r.check_title?.toLowerCase().includes(search.toLowerCase()) && !r.check_id?.toLowerCase().includes(search.toLowerCase())) return false;
+      if (severityFilter !== 'all' && r.severity !== severityFilter) return false;
+      if (statusFilter !== 'all' && r.status !== statusFilter) return false;
+      if (domainFilter !== 'all' && r.domain !== domainFilter) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      // Sort by check_id numerically: CIS-1.1.1 before CIS-1.1.2 before CIS-2.1.1 etc.
+      const parseId = (id = '') => {
+        const parts = id.replace(/^CIS-/, '').split('.');
+        return parts.map(p => parseInt(p.replace(/\D/g, '')) || 0);
+      };
+      const pa = parseId(a.check_id);
+      const pb = parseId(b.check_id);
+      for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+        if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0);
+      }
+      return 0;
+    });
 
   return (
     <div className="space-y-6">

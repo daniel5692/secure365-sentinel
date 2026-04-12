@@ -1520,19 +1520,19 @@ const CHECK_META = {
   'CIS-8.5.8': { title: 'External Meeting Chat Off', title_he: 'צ׳אט עם חיצוניים בפגישה מושבת', domain: 'teams', severity: 'medium', category: 'Teams Meetings' },
   'CIS-8.5.9': { title: 'Meeting Recording Off by Default', title_he: 'הקלטת פגישות מושבתת כברירת מחדל', domain: 'teams', severity: 'medium', category: 'Teams Meetings' },
   'CIS-8.6.1': { title: 'Users Can Report Security Concerns in Teams', title_he: 'משתמשים יכולים לדווח על חששות אבטחה', domain: 'teams', severity: 'medium', category: 'Teams Messaging' },
-  // --- Fabric Tenant ---
-  'CIS-9.1.1': { title: 'Fabric Guest Access Restricted', title_he: 'גישת אורחים ב-Fabric מוגבלת', domain: 'purview', severity: 'high', category: 'Microsoft Fabric' },
-  'CIS-9.1.2': { title: 'Fabric External User Invitations Restricted', title_he: 'הזמנות חיצוניות ב-Fabric מוגבלות', domain: 'purview', severity: 'high', category: 'Microsoft Fabric' },
-  'CIS-9.1.3': { title: 'Fabric Guest Content Access Restricted', title_he: 'גישת אורחים לתוכן Fabric מוגבלת', domain: 'purview', severity: 'high', category: 'Microsoft Fabric' },
-  'CIS-9.1.4': { title: 'Fabric Publish to Web Restricted', title_he: 'Publish to Web ב-Fabric מוגבל', domain: 'purview', severity: 'critical', category: 'Microsoft Fabric' },
-  'CIS-9.1.5': { title: 'R and Python Visuals Sharing Disabled', title_he: 'שיתוף ויזואליזציות R ו-Python מושבת', domain: 'purview', severity: 'medium', category: 'Microsoft Fabric' },
-  'CIS-9.1.6': { title: 'Sensitivity Labels for Fabric Content', title_he: 'תוויות רגישות לתוכן Fabric', domain: 'purview', severity: 'high', category: 'Microsoft Fabric' },
-  'CIS-9.1.7': { title: 'Fabric Shareable Links Restricted', title_he: 'קישורים לשיתוף ב-Fabric מוגבלים', domain: 'purview', severity: 'high', category: 'Microsoft Fabric' },
-  'CIS-9.1.8': { title: 'Fabric External Data Sharing Restricted', title_he: 'שיתוף נתונים חיצוני ב-Fabric מוגבל', domain: 'purview', severity: 'high', category: 'Microsoft Fabric' },
-  'CIS-9.1.9': { title: 'Fabric ResourceKey Auth Blocked', title_he: 'ResourceKey Auth ב-Fabric חסום', domain: 'purview', severity: 'high', category: 'Microsoft Fabric' },
-  'CIS-9.1.10': { title: 'Fabric API Access by SP Restricted', title_he: 'גישת Service Principals ל-APIs מוגבלת', domain: 'purview', severity: 'high', category: 'Microsoft Fabric' },
-  'CIS-9.1.11': { title: 'SP Cannot Create Fabric Profiles', title_he: 'Service Principals לא יוצרים פרופילים ב-Fabric', domain: 'purview', severity: 'medium', category: 'Microsoft Fabric' },
-  'CIS-9.1.12': { title: 'SP Workspaces and Pipelines Restricted', title_he: 'יצירת Workspaces ו-Pipelines על ידי SP מוגבלת', domain: 'purview', severity: 'medium', category: 'Microsoft Fabric' },
+  // --- Power BI / Fabric ---
+  'CIS-9.1.1': { title: 'Fabric Guest Access Restricted', title_he: 'גישת אורחים ב-Fabric מוגבלת', domain: 'power_bi', severity: 'high', category: 'Power BI / Fabric' },
+  'CIS-9.1.2': { title: 'Fabric External User Invitations Restricted', title_he: 'הזמנות חיצוניות ב-Fabric מוגבלות', domain: 'power_bi', severity: 'high', category: 'Power BI / Fabric' },
+  'CIS-9.1.3': { title: 'Fabric Guest Content Access Restricted', title_he: 'גישת אורחים לתוכן Fabric מוגבלת', domain: 'power_bi', severity: 'high', category: 'Power BI / Fabric' },
+  'CIS-9.1.4': { title: 'Fabric Publish to Web Restricted', title_he: 'Publish to Web ב-Fabric מוגבל', domain: 'power_bi', severity: 'critical', category: 'Power BI / Fabric' },
+  'CIS-9.1.5': { title: 'R and Python Visuals Sharing Disabled', title_he: 'שיתוף ויזואליזציות R ו-Python מושבת', domain: 'power_bi', severity: 'medium', category: 'Power BI / Fabric' },
+  'CIS-9.1.6': { title: 'Sensitivity Labels for Fabric Content', title_he: 'תוויות רגישות לתוכן Fabric', domain: 'power_bi', severity: 'high', category: 'Power BI / Fabric' },
+  'CIS-9.1.7': { title: 'Fabric Shareable Links Restricted', title_he: 'קישורים לשיתוף ב-Fabric מוגבלים', domain: 'power_bi', severity: 'high', category: 'Power BI / Fabric' },
+  'CIS-9.1.8': { title: 'Fabric External Data Sharing Restricted', title_he: 'שיתוף נתונים חיצוני ב-Fabric מוגבל', domain: 'power_bi', severity: 'high', category: 'Power BI / Fabric' },
+  'CIS-9.1.9': { title: 'Fabric ResourceKey Auth Blocked', title_he: 'ResourceKey Auth ב-Fabric חסום', domain: 'power_bi', severity: 'high', category: 'Power BI / Fabric' },
+  'CIS-9.1.10': { title: 'Fabric API Access by SP Restricted', title_he: 'גישת Service Principals ל-APIs מוגבלת', domain: 'power_bi', severity: 'high', category: 'Power BI / Fabric' },
+  'CIS-9.1.11': { title: 'SP Cannot Create Fabric Profiles', title_he: 'Service Principals לא יוצרים פרופילים ב-Fabric', domain: 'power_bi', severity: 'medium', category: 'Power BI / Fabric' },
+  'CIS-9.1.12': { title: 'SP Workspaces and Pipelines Restricted', title_he: 'יצירת Workspaces ו-Pipelines על ידי SP מוגבלת', domain: 'power_bi', severity: 'medium', category: 'Power BI / Fabric' },
 };
 
 const ALL_CHECKS = Object.keys(CHECK_META);

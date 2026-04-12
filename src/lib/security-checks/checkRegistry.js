@@ -64,6 +64,7 @@ export const DOMAIN_META = {
   onedrive: { label: 'OneDrive', labelHe: 'OneDrive', icon: 'HardDrive', color: 'blue' },
   teams: { label: 'Microsoft Teams', labelHe: 'Microsoft Teams', icon: 'Users', color: 'purple' },
   purview: { label: 'Purview / Compliance', labelHe: 'Purview / תאימות', icon: 'Scale', color: 'amber' },
+  power_bi: { label: 'Power BI / Fabric', labelHe: 'Power BI / Fabric', icon: 'BarChart2', color: 'yellow' },
   external_sharing: { label: 'External Sharing', labelHe: 'שיתוף חיצוני', icon: 'Share2', color: 'orange' },
   mail_flow: { label: 'Mail Flow Protection', labelHe: 'הגנת זרימת דואר', icon: 'MailCheck', color: 'cyan' },
   secure_score: { label: 'Secure Score', labelHe: 'ציון אבטחה', icon: 'Target', color: 'green' },
