@@ -18,12 +18,36 @@ async function getAccessToken(tenantId) {
   return data.access_token;
 }
 
-async function graphGet(token, path) {
-  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+async function graphGet(token, path, beta = false) {
+  const base = beta ? 'https://graph.microsoft.com/beta' : 'https://graph.microsoft.com/v1.0';
+  const res = await fetch(`${base}${path}`, {
     headers: { Authorization: `Bearer ${token}`, ConsistencyLevel: 'eventual' },
   });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    const err = await res.text().catch(() => '');
+    console.error(`Graph error ${res.status} for ${path}: ${err}`);
+    return null;
+  }
   return res.json();
+}
+
+// Fetch all pages of a resource
+async function graphGetAll(token, path, beta = false) {
+  let results = [];
+  let nextPath = path;
+  while (nextPath) {
+    const data = await graphGet(token, nextPath, beta);
+    if (!data) break;
+    results = results.concat(data.value || []);
+    // nextLink contains full URL, extract path+query
+    if (data['@odata.nextLink']) {
+      const base = beta ? 'https://graph.microsoft.com/beta' : 'https://graph.microsoft.com/v1.0';
+      nextPath = data['@odata.nextLink'].replace(base, '');
+    } else {
+      nextPath = null;
+    }
+  }
+  return results;
 }
 
 Deno.serve(async (req) => {
@@ -36,52 +60,78 @@ Deno.serve(async (req) => {
 
   const token = await getAccessToken(customer_tenant_id);
 
-  // Fetch all in parallel
+  // Fetch all users with mailboxSettings (beta) and places in parallel
   const [
-    allUsersCount,
-    guestUsers,
-    activeMembers,
-    disabledUsers,     // shared mailboxes + resource mailboxes are disabled accounts with mail
-    rooms,             // /places API for rooms
+    allUsersWithMailbox,
+    placesRooms,
     enterpriseApps,
     applications,
     orgContacts,
     deletedUsers,
   ] = await Promise.all([
-    graphGet(token, "/users?$count=true&$top=1&$select=id"),
-    graphGet(token, "/users?$filter=userType eq 'Guest'&$count=true&$top=999&$select=id,displayName,userPrincipalName,mail,accountEnabled"),
-    graphGet(token, "/users?$filter=userType eq 'Member' and accountEnabled eq true and assignedLicenses/$count ne 0&$count=true&$top=999&$select=id,displayName,userPrincipalName,mail,accountEnabled,assignedLicenses"),
-    graphGet(token, "/users?$filter=userType eq 'Member' and accountEnabled eq false and mail ne null&$count=true&$top=999&$select=id,displayName,userPrincipalName,mail,accountEnabled,assignedLicenses"),
-    graphGet(token, "/places/microsoft.graph.room?$top=999&$select=id,displayName,emailAddress,building,floorNumber,capacity"),
-    graphGet(token, "/servicePrincipals?$filter=tags/any(t:t eq 'WindowsAzureActiveDirectoryIntegratedApp')&$top=999&$select=id,displayName,appId,accountEnabled,createdDateTime,passwordCredentials,keyCredentials"),
-    graphGet(token, '/applications?$top=999&$select=id,displayName,appId,createdDateTime,passwordCredentials,keyCredentials'),
-    graphGet(token, "/contacts?$top=999&$select=id,displayName,emailAddresses,companyName,jobTitle"),
-    graphGet(token, "/directory/deletedItems/microsoft.graph.user?$count=true&$top=999&$select=id,displayName,userPrincipalName,mail,deletedDateTime"),
+    // Beta endpoint gives us mailboxSettings.userPurpose to distinguish user/shared/room/equipment
+    graphGetAll(token, '/users?$select=id,displayName,userPrincipalName,mail,accountEnabled,userType,assignedLicenses,createdDateTime&$top=999', true),
+    // Places API for rooms
+    graphGetAll(token, '/places/microsoft.graph.room?$select=id,displayName,emailAddress,building,floorNumber,capacity&$top=999', true),
+    graphGetAll(token, "/servicePrincipals?$filter=tags/any(t:t eq 'WindowsAzureActiveDirectoryIntegratedApp')&$top=999&$select=id,displayName,appId,accountEnabled,createdDateTime,passwordCredentials,keyCredentials", false),
+    graphGetAll(token, '/applications?$top=999&$select=id,displayName,appId,createdDateTime,passwordCredentials,keyCredentials', false),
+    graphGetAll(token, '/contacts?$top=999&$select=id,displayName,emailAddresses,companyName,jobTitle', false),
+    graphGetAll(token, '/directory/deletedItems/microsoft.graph.user?$top=999&$select=id,displayName,userPrincipalName,mail,deletedDateTime', false),
   ]);
 
-  // Disabled users: split rooms vs shared mailboxes
-  // Rooms have emailAddress matching their UPN and are resource accounts
-  const roomEmails = new Set((rooms?.value || []).map(r => r.emailAddress?.toLowerCase()));
-  const disabledList = disabledUsers?.value || [];
-  
-  const sharedMailboxes = disabledList.filter(u => !roomEmails.has(u.mail?.toLowerCase()));
-  const resourceRooms = rooms?.value || [];
+  // Now fetch mailboxSettings per user to determine type
+  // For efficiency, fetch unlicensed members' mailboxSettings only
+  const unlicensedMembers = allUsersWithMailbox.filter(u =>
+    u.userType === 'Member' &&
+    Array.isArray(u.assignedLicenses) && u.assignedLicenses.length === 0 &&
+    u.mail
+  );
+
+  // Fetch mailboxSettings for unlicensed members to detect shared vs room
+  const mailboxSettingsResults = await Promise.all(
+    unlicensedMembers.map(async u => {
+      const ms = await graphGet(token, `/users/${u.id}/mailboxSettings`, true);
+      return { id: u.id, userPurpose: ms?.userPurpose };
+    })
+  );
+  const mailboxPurposeMap = {};
+  mailboxSettingsResults.forEach(r => { mailboxPurposeMap[r.id] = r.userPurpose; });
+
+  // Categorize
+  const guestUsers = allUsersWithMailbox.filter(u => u.userType === 'Guest');
+  const activeMembers = allUsersWithMailbox.filter(u =>
+    u.userType === 'Member' &&
+    u.accountEnabled &&
+    Array.isArray(u.assignedLicenses) && u.assignedLicenses.length > 0
+  );
+  const sharedMailboxes = unlicensedMembers.filter(u => {
+    const purpose = mailboxPurposeMap[u.id];
+    return purpose === 'shared' || purpose === 'sharedMailbox';
+  });
+  // Rooms from places API (most reliable)
+  const rooms = placesRooms;
+
+  // Also check if places returned nothing - fallback to mailboxSettings room/equipment
+  const resourceAccounts = rooms.length === 0
+    ? unlicensedMembers.filter(u => {
+        const purpose = mailboxPurposeMap[u.id];
+        return purpose === 'room' || purpose === 'equipment';
+      })
+    : [];
+  const allRooms = rooms.length > 0 ? rooms : resourceAccounts;
 
   // App credentials analysis
   const now = new Date();
-  const appCredentials = (applications?.value || []).map(app => {
+  const appCredentials = applications.map(app => {
     const allCreds = [
       ...(app.passwordCredentials || []).map(c => ({ ...c, type: 'secret' })),
       ...(app.keyCredentials || []).map(c => ({ ...c, type: 'certificate' })),
     ];
-    const activeCredsList = allCreds.filter(c => new Date(c.endDateTime) > now);
-    const expiredList = allCreds.filter(c => new Date(c.endDateTime) <= now);
-    const soonExpiringList = activeCredsList.filter(c => {
-      const daysLeft = (new Date(c.endDateTime) - now) / (1000 * 60 * 60 * 24);
-      return daysLeft <= 30;
-    });
+    const activeCreds = allCreds.filter(c => new Date(c.endDateTime) > now);
+    const expiredCreds = allCreds.filter(c => new Date(c.endDateTime) <= now);
+    const soonExpiring = activeCreds.filter(c => (new Date(c.endDateTime) - now) / 86400000 <= 30);
     const status = allCreds.length === 0 ? 'no_credentials'
-      : activeCredsList.length > 0 ? (soonExpiringList.length > 0 ? 'expiring_soon' : 'active')
+      : activeCreds.length > 0 ? (soonExpiring.length > 0 ? 'expiring_soon' : 'active')
       : 'expired';
     return {
       id: app.id,
@@ -90,37 +140,36 @@ Deno.serve(async (req) => {
       createdDateTime: app.createdDateTime,
       status,
       totalCredentials: allCreds.length,
-      expiredCount: expiredList.length,
-      soonExpiringCount: soonExpiringList.length,
+      expiredCount: expiredCreds.length,
+      soonExpiringCount: soonExpiring.length,
       credentials: allCreds.map(c => ({
         type: c.type,
-        displayName: c.displayName || c.customKeyIdentifier || c.keyId,
+        displayName: c.displayName || c.keyId,
         endDateTime: c.endDateTime,
-        startDateTime: c.startDateTime,
         isExpired: new Date(c.endDateTime) <= now,
-        daysLeft: Math.round((new Date(c.endDateTime) - now) / (1000 * 60 * 60 * 24)),
+        daysLeft: Math.round((new Date(c.endDateTime) - now) / 86400000),
       })),
     };
   });
 
   return Response.json({
     stats: {
-      totalUsers: allUsersCount?.['@odata.count'] ?? 0,
-      guestUsers: guestUsers?.value?.length ?? 0,
-      activeMailboxes: activeMembers?.value?.length ?? 0,
+      totalUsers: allUsersWithMailbox.filter(u => u.userType === 'Member').length,
+      guestUsers: guestUsers.length,
+      activeMailboxes: activeMembers.length,
       sharedMailboxes: sharedMailboxes.length,
-      meetingRooms: resourceRooms.length,
-      enterpriseApps: enterpriseApps?.value?.length ?? 0,
-      contacts: orgContacts?.value?.length ?? 0,
-      deletedUsers: deletedUsers?.value?.length ?? 0,
+      meetingRooms: allRooms.length,
+      enterpriseApps: enterpriseApps.length,
+      contacts: orgContacts.length,
+      deletedUsers: deletedUsers.length,
     },
-    activeMembers: activeMembers?.value || [],
-    guestUsers: guestUsers?.value || [],
+    activeMembers,
+    guestUsers,
     sharedMailboxes,
-    rooms: resourceRooms,
-    enterpriseApps: enterpriseApps?.value || [],
+    rooms: allRooms,
+    enterpriseApps,
     appCredentials,
-    contacts: orgContacts?.value || [],
-    deletedUsers: deletedUsers?.value || [],
+    contacts: orgContacts,
+    deletedUsers,
   });
 });
