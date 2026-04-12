@@ -1,0 +1,42 @@
+{
+  "name": "InventorySnapshot",
+  "type": "object",
+  "properties": {
+    "tenant_id": {
+      "type": "string"
+    },
+    "tenant_name": {
+      "type": "string"
+    },
+    "workspace_id": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "running",
+        "completed",
+        "failed"
+      ],
+      "default": "running"
+    },
+    "snapshot_label": {
+      "type": "string",
+      "description": "Human readable date+time label"
+    },
+    "error_message": {
+      "type": "string"
+    },
+    "stats": {
+      "type": "object"
+    },
+    "data": {
+      "type": "object",
+      "description": "Full inventory payload"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "tenant_name"
+  ]
+}
