@@ -24,17 +24,17 @@ export default function Findings() {
   const [selectedScan, setSelectedScan] = useState(urlScanId || 'all');
 
   useEffect(() => {
-    base44.auth.me().then(user => {
-    Promise.all([
-      base44.entities.CheckResult.filter({ created_by: user.email }, '-created_date', 500),
-      base44.entities.ScanJob.filter({ created_by: user.email }, '-created_date', 50),
-    ]).then(([r, s]) => {
-      const completedScans = s.filter(sc => sc.status === 'completed');
-      const validScanIds = new Set(completedScans.map(sc => sc.id));
-      setResults(r.filter(res => validScanIds.has(res.scan_job_id)));
+    base44.auth.me().then(async user => {
+      const allScans = await base44.entities.ScanJob.filter({ created_by: user.email }, '-created_date', 50);
+      const completedScans = allScans.filter(sc => sc.status === 'completed');
       setScans(completedScans);
+      if (completedScans.length === 0) { setLoading(false); return; }
+      // Fetch results for all completed scans in parallel
+      const chunks = await Promise.all(
+        completedScans.map(sc => base44.entities.CheckResult.filter({ scan_job_id: sc.id }, '-created_date', 100))
+      );
+      setResults(chunks.flat());
       setLoading(false);
-    });
     });
   }, []);
 
