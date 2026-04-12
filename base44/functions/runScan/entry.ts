@@ -923,146 +923,300 @@ async function runCheck(token, checkId) {
       };
     }
 
+    // --- M365 Admin Center ---
+    case 'CIS-M365-1.1.4': {
+      const roles11 = await graphGet(token, "/directoryRoles?$filter=roleTemplateId eq '62e90394-69f5-4237-9190-012177145e10'");
+      if (!roles11.value?.length) return { status: 'not_applicable', actual_value: 'No Global Admins found', expected_value: 'Admin accounts with minimal licenses', evidence: {} };
+      const members11 = await graphGet(token, `/directoryRoles/${roles11.value[0].id}/members?$select=displayName,userPrincipalName,id`);
+      const admins11 = members11.value || [];
+      const withHighFootprint = [];
+      for (const admin of admins11.slice(0, 8)) {
+        const lic = await graphGet(token, `/users/${admin.id}/licenseDetails?$select=skuPartNumber`).catch(() => ({ value: [] }));
+        const skus = (lic.value || []).map(l => l.skuPartNumber);
+        if (skus.some(s => ['SPE_E3','SPE_E5','ENTERPRISEPACK','ENTERPRISEPREMIUM','SPB'].some(p => s.includes(p)))) withHighFootprint.push(admin.displayName || admin.userPrincipalName);
+      }
+      return { status: withHighFootprint.length === 0 ? 'passed' : 'warning', actual_value: withHighFootprint.length === 0 ? 'Admin accounts appear to use minimal licenses' : `${withHighFootprint.length} admin(s) with E3/E5 licenses`, expected_value: 'Admin accounts should not have E3/E5 licenses', evidence: { 'מנהלים שנבדקו': admins11.length, 'עם E3/E5': withHighFootprint.join(', ') || 'אין', 'מצב': withHighFootprint.length === 0 ? 'תקין ✓' : 'בדוק ✗' } };
+    }
+
+    case 'CIS-M365-1.2.1': {
+      const groups121 = await graphGet(token, "/groups?$filter=visibility eq 'Public' and groupTypes/any(c:c eq 'Unified')&$select=displayName,visibility&$top=50");
+      const publicGroups = groups121.value || [];
+      return { status: publicGroups.length === 0 ? 'passed' : 'warning', actual_value: `${publicGroups.length} public Microsoft 365 Groups found`, expected_value: 'No unmanaged public M365 Groups', evidence: { 'קבוצות ציבוריות': publicGroups.length, 'שמות': publicGroups.slice(0,10).map(g => g.displayName).join(', ') || 'אין', 'מצב': publicGroups.length === 0 ? 'תקין ✓' : 'בדוק קבוצות ✗' } };
+    }
+
+    case 'CIS-M365-1.2.2': {
+      const unlicensed = await graphGet(token, "/users?$select=displayName,userPrincipalName,accountEnabled,assignedLicenses&$top=100").catch(() => ({ value: [] }));
+      const shared = (unlicensed.value || []).filter(u => (!u.assignedLicenses || u.assignedLicenses.length === 0) && u.accountEnabled === true);
+      return { status: shared.length === 0 ? 'passed' : 'failed', actual_value: shared.length === 0 ? 'All unlicensed accounts have sign-in disabled' : `${shared.length} unlicensed account(s) with sign-in enabled`, expected_value: 'Shared mailboxes: accountEnabled = false', evidence: { 'חשבונות ללא רישיון עם כניסה פעילה': shared.length, 'דוגמאות': shared.slice(0,5).map(u => u.userPrincipalName).join(', ') || 'אין', 'מצב': shared.length === 0 ? 'תקין ✓' : 'דורש תיקון ✗' } };
+    }
+
+    case 'CIS-M365-1.3.2': {
+      const policies132 = await graphGet(token, '/policies/activityBasedTimeoutPolicies').catch(() => ({ value: [] }));
+      const policyList = policies132.value || [];
+      if (policyList.length === 0) return { status: 'failed', actual_value: 'No activity-based timeout policy configured', expected_value: 'Idle session timeout ≤ 3 hours', evidence: { 'מצב': 'לא מוגדר ✗' } };
+      const hasShortTimeout = policyList.some(p => { try { const def = JSON.parse(p.definition?.[0] || '{}'); const timeout = def.ActivityBasedAuthenticationTimeoutPolicy?.WebSessionIdleTimeout || ''; const m = timeout.match(/PT(\d+)H/); return m && parseInt(m[1]) <= 3; } catch { return false; } });
+      return { status: hasShortTimeout ? 'passed' : 'warning', actual_value: hasShortTimeout ? 'Idle session timeout ≤ 3h configured' : 'Policy exists but timeout may be > 3h', expected_value: 'Idle session timeout ≤ 3 hours', evidence: { 'מדיניות קיימת': policyList.length, 'מצב': hasShortTimeout ? 'תקין ✓' : 'בדוק ידנית ✗' } };
+    }
+
+    case 'CIS-M365-1.3.3': {
+      const orgId133 = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
+      const orgCfg133 = orgId133 && _exToken ? await exchangeGet(orgId133, 'Organization') : null;
+      const orgD133 = orgCfg133?.value?.[0] || orgCfg133;
+      if (orgD133?.ExternalCalendarSharingEnabled !== undefined) {
+        const allowed = orgD133.ExternalCalendarSharingEnabled;
+        return { status: !allowed ? 'passed' : 'failed', actual_value: `ExternalCalendarSharingEnabled: ${allowed}`, expected_value: 'false', evidence: { 'שיתוף לוח שנה חיצוני': allowed, 'מצב': !allowed ? 'תקין ✓' : 'יש להשבית ✗' } };
+      }
+      return { status: 'manual', actual_value: 'Cannot verify via Exchange API', expected_value: 'External calendar sharing = disabled', evidence: { 'הערה': 'Exchange Admin Center → Organization → Sharing → Disable external calendar sharing' } };
+    }
+
+    case 'CIS-M365-1.3.4': {
+      const apps134 = await graphGet(token, '/admin/appsAndServices', 'beta').catch(() => null);
+      if (apps134?.settings) {
+        const storeEnabled = apps134.settings.isOfficeStoreEnabled;
+        const trialEnabled = apps134.settings.isAppAndServicesTrialEnabled;
+        return { status: !storeEnabled && !trialEnabled ? 'passed' : 'failed', actual_value: `isOfficeStoreEnabled: ${storeEnabled}, trial: ${trialEnabled}`, expected_value: 'Both = false', evidence: { 'Office Store': storeEnabled, 'Trial': trialEnabled, 'מצב': !storeEnabled && !trialEnabled ? 'תקין ✓' : 'משתמשים יכולים להתקין אפליקציות ✗' } };
+      }
+      return { status: 'manual', actual_value: 'Add OrgSettings-AppsAndServices.Read.All permission', expected_value: 'isOfficeStoreEnabled = false', evidence: { 'הוסף הרשאה': 'OrgSettings-AppsAndServices.Read.All' } };
+    }
+
+    case 'CIS-M365-1.3.5': {
+      const forms135 = await graphGet(token, '/admin/forms', 'beta').catch(() => null);
+      if (forms135?.isInOrgFormsPhishingScanEnabled !== undefined) {
+        const en = forms135.isInOrgFormsPhishingScanEnabled;
+        return { status: en ? 'passed' : 'failed', actual_value: `isInOrgFormsPhishingScanEnabled: ${en}`, expected_value: 'true', evidence: { 'הגנת פישינג': en, 'מצב': en ? 'תקין ✓' : 'הפעל ✗' } };
+      }
+      return { status: 'manual', actual_value: 'Add OrgSettings-Forms.Read.All permission', expected_value: 'isInOrgFormsPhishingScanEnabled = true', evidence: { 'הוסף הרשאה': 'OrgSettings-Forms.Read.All' } };
+    }
+
+    case 'CIS-M365-1.3.7': {
+      const sp137 = await graphGet(token, "/servicePrincipals?$filter=appId eq 'c1f33bc0-bdb4-4248-ba9b-096807ddb43e'&$select=displayName,accountEnabled").catch(() => null);
+      if (sp137?.value !== undefined) {
+        if (sp137.value.length === 0) return { status: 'passed', actual_value: 'Third-party storage SP absent (disabled)', expected_value: 'SP disabled or absent', evidence: { 'מצב': 'תקין ✓' } };
+        const en = sp137.value[0].accountEnabled;
+        return { status: !en ? 'passed' : 'failed', actual_value: `accountEnabled: ${en}`, expected_value: 'false', evidence: { 'SP פעיל': en, 'מצב': !en ? 'תקין ✓' : 'אחסון צד שלישי פעיל ✗' } };
+      }
+      return { status: 'manual', actual_value: 'Cannot query service principals', expected_value: 'Third-party storage SP disabled', evidence: { 'הערה': 'M365 Admin Center → Settings → Org settings → Microsoft 365 on the web' } };
+    }
+
+    case 'CIS-M365-1.3.9': {
+      const bk = await graphGet(token, '/admin/bookings', 'beta').catch(() => null);
+      if (bk) { const en = bk.isBookingsEnabled ?? bk.bookingsEnabled; if (en !== undefined) return { status: !en ? 'passed' : 'warning', actual_value: `Bookings enabled: ${en}`, expected_value: 'Bookings restricted', evidence: { 'Bookings': en, 'מצב': !en ? 'תקין ✓' : 'בדוק הגבלות ✗' } }; }
+      return { status: 'manual', actual_value: 'Cannot access Bookings via Graph API', expected_value: 'Bookings pages restricted', evidence: { 'הערה': 'M365 Admin Center → Settings → Org settings → Bookings' } };
+    }
+
+    // --- Defender Email Security ---
+    case 'CIS-2.1.5': case 'CIS-2.1.6': case 'CIS-2.1.11': case 'CIS-2.1.12': case 'CIS-2.1.13': case 'CIS-2.1.14': case 'CIS-2.1.15': case 'CIS-2.4.1': case 'CIS-2.4.2': case 'CIS-2.4.4': case 'CIS-3.2.2': {
+      const scoreD = await getSecureScoreControls(token);
+      const kwMapD = { 'CIS-2.1.5': ['SafeAttachmentSPO','safeattachspo'], 'CIS-2.1.6': ['OutboundSpam','spamoutbound'], 'CIS-2.1.11': ['AttachmentFilter','CommonAttachment'], 'CIS-2.1.12': ['IPAllowList','ipallow'], 'CIS-2.1.13': ['SafeList','safelist'], 'CIS-2.1.14': ['AllowedDomains','alloweddomain'], 'CIS-2.1.15': ['MessageLimit','OutboundLimit'], 'CIS-2.4.1': ['PriorityAccount','priorityaccount'], 'CIS-2.4.2': ['StrictPreset','strictprotection'], 'CIS-2.4.4': ['ZAPTeams','zapteams'], 'CIS-3.2.2': ['DLPTeams','dlpteams'] };
+      const noteD = { 'CIS-2.1.5': 'Defender → Safe Attachments → Global settings', 'CIS-2.1.6': 'Defender → Anti-spam outbound → Notifications', 'CIS-2.1.11': 'Defender → Anti-malware → Common attachment filter', 'CIS-2.1.12': 'Defender → Connection filter → IP Allow List: empty', 'CIS-2.1.13': 'Defender → Connection filter → Safe list: Off', 'CIS-2.1.14': 'Defender → Anti-spam → Allowed sender domains: empty', 'CIS-2.1.15': 'Defender → Anti-spam outbound → Message limits', 'CIS-2.4.1': 'Defender → Settings → User tags → Priority account', 'CIS-2.4.2': 'Defender → Preset security policies → Strict', 'CIS-2.4.4': 'Defender → Safe Attachments → ZAP for Teams', 'CIS-3.2.2': 'Purview → DLP → Policies → Teams location' };
+      const kws = kwMapD[checkId] || [];
+      let ctrlD = null; for (const kw of kws) { ctrlD = getControl(scoreD, kw); if (ctrlD) break; }
+      if (ctrlD) { const impl = ctrlD.score > 0; return { status: impl ? 'passed' : 'failed', actual_value: `${ctrlD.controlName}: ${ctrlD.score}/${ctrlD.maxScore}`, expected_value: 'Implemented', evidence: { 'ציון': `${ctrlD.score}/${ctrlD.maxScore}`, 'מצב': impl ? 'תקין ✓' : 'הגדר ✗' } }; }
+      return { status: 'warning', actual_value: 'Not found in Secure Score', expected_value: 'Implemented', evidence: { 'הערה': noteD[checkId] || 'בדוק בפורטל' } };
+    }
+
+    // --- Intune ---
+    case 'CIS-4.1': {
+      const compPolicies = await graphGet(token, '/deviceManagement/deviceCompliancePolicies?$select=id,displayName&$top=10').catch(() => null);
+      if (!compPolicies) return { status: 'warning', actual_value: 'Cannot access Intune', expected_value: 'Devices without policy = Not Compliant', evidence: { 'הערה': 'Intune → Devices → Compliance → Compliance policy settings' } };
+      return { status: 'manual', actual_value: `Intune accessible; ${(compPolicies.value || []).length} compliance policies found`, expected_value: 'Mark devices with no compliance policy as Not compliant', evidence: { 'מדיניות': (compPolicies.value || []).map(p => p.displayName).join(', ') || 'אין', 'הערה': 'Intune → Devices → Compliance → Compliance policy settings' } };
+    }
+
+    case 'CIS-4.2': {
+      const enroll = await graphGet(token, '/deviceManagement/deviceEnrollmentConfigurations?$select=displayName,deviceEnrollmentConfigurationType&$top=20').catch(() => ({ value: [] }));
+      const restrictions = (enroll.value || []).filter(c => c.deviceEnrollmentConfigurationType === 'limit' || c.deviceEnrollmentConfigurationType === 'platformRestrictions');
+      return { status: restrictions.length > 0 ? 'warning' : 'failed', actual_value: `${restrictions.length} enrollment restriction(s) found`, expected_value: 'Personally owned devices blocked', evidence: { 'הגדרות': restrictions.map(r => r.displayName).join(', ') || 'אין', 'הערה': 'Intune → Devices → Enrollment → Block personally owned' } };
+    }
+
+    // --- Entra ID Extended ---
+    case 'CIS-5.1.2.1': {
+      const ud = await graphGet(token, "/users?$select=id,userPrincipalName,userType&$filter=userType eq 'Member'&$top=30").catch(() => null);
+      if (!ud?.value) return { status: 'manual', actual_value: 'Cannot query users', expected_value: 'Per-user MFA disabled for all', evidence: { 'הערה': 'Entra admin center → Users → Multi-Factor Authentication (legacy)' } };
+      const withMfa = [];
+      for (const u of ud.value.slice(0, 20)) {
+        const req = await graphGet(token, `/users/${u.id}/authentication/requirements`, 'beta').catch(() => null);
+        if (req?.perUserMfaState && req.perUserMfaState !== 'disabled') withMfa.push(`${u.userPrincipalName}(${req.perUserMfaState})`);
+      }
+      return { status: withMfa.length === 0 ? 'passed' : 'failed', actual_value: `${withMfa.length} user(s) with per-user MFA enabled/enforced`, expected_value: 'All users perUserMfaState = disabled', evidence: { 'משתמשים': withMfa.length, 'דוגמאות': withMfa.slice(0,5).join(', ') || 'אין', 'מצב': withMfa.length === 0 ? 'תקין ✓' : 'כבה per-user MFA ✗' } };
+    }
+
+    case 'CIS-5.1.2.2': { const p = await graphGet(token, '/policies/authorizationPolicy?$select=defaultUserRolePermissions'); const v = p?.defaultUserRolePermissions?.allowedToCreateApps; return { status: v === false ? 'passed' : 'failed', actual_value: `allowedToCreateApps: ${v}`, expected_value: 'false', evidence: { 'הגדרה': v, 'מצב': v === false ? 'תקין ✓' : 'משתמשים יכולים לאשר אפליקציות ✗' } }; }
+    case 'CIS-5.1.2.3': { const p = await graphGet(token, '/policies/authorizationPolicy?$select=allowedToCreateTenants'); const v = p?.allowedToCreateTenants; return { status: v === false ? 'passed' : 'failed', actual_value: `allowedToCreateTenants: ${v}`, expected_value: 'false', evidence: { 'הגדרה': v, 'מצב': v === false ? 'תקין ✓' : 'משתמשים יכולים ליצור Tenants ✗' } }; }
+    case 'CIS-5.1.2.4': return { status: 'manual', actual_value: 'Cannot verify Entra admin center restriction via Graph API', expected_value: 'Restrict access to Entra admin center = Yes', evidence: { 'הערה': 'Entra admin center → Users → User settings → Restrict access to Microsoft Entra admin center: Yes' } };
+    case 'CIS-5.1.2.5': return { status: 'manual', actual_value: 'Cannot verify Sign-in branding via Graph API', expected_value: 'Show option to remain signed in = No', evidence: { 'הערה': 'Entra admin center → Identity → Company branding → Sign-in page → Stay signed in: Off' } };
+    case 'CIS-5.1.2.6': return { status: 'manual', actual_value: 'Cannot check LinkedIn connections via standard Graph API', expected_value: 'LinkedIn account connections = No', evidence: { 'הערה': 'Entra admin center → Identity → Users → User settings → LinkedIn: No' } };
+
+    case 'CIS-5.1.3.1': {
+      const dg = await graphGet(token, "/groups?$filter=groupTypes/any(c:c eq 'DynamicMembership')&$select=displayName,membershipRule&$top=50");
+      const guestGroups = (dg.value || []).filter(g => g.membershipRule?.toLowerCase().includes('guest'));
+      return { status: guestGroups.length > 0 ? 'passed' : 'failed', actual_value: guestGroups.length > 0 ? `${guestGroups.length} dynamic guest group(s) found` : 'No dynamic guest group', expected_value: 'Dynamic group: user.userType -eq "Guest"', evidence: { 'קבוצות': guestGroups.map(g => g.displayName).join(', ') || 'אין', 'מצב': guestGroups.length > 0 ? 'תקין ✓' : 'צור קבוצה דינמית לאורחים ✗' } };
+    }
+
+    case 'CIS-5.1.3.2': { const p = await graphGet(token, '/policies/authorizationPolicy?$select=defaultUserRolePermissions'); const v = p?.defaultUserRolePermissions?.allowedToCreateSecurityGroups; return { status: v === false ? 'passed' : 'failed', actual_value: `allowedToCreateSecurityGroups: ${v}`, expected_value: 'false', evidence: { 'הגדרה': v, 'מצב': v === false ? 'תקין ✓' : 'משתמשים יכולים ליצור קבוצות אבטחה ✗' } }; }
+
+    case 'CIS-5.1.4.1': { const p = await graphGet(token, '/policies/deviceRegistrationPolicy').catch(() => null); if (!p) return { status: 'warning', actual_value: 'Cannot access device registration policy', expected_value: 'Device join restricted', evidence: {} }; const s = p.azureADJoin?.allowedToJoin?.setting || 'all'; return { status: s !== 'all' ? 'passed' : 'failed', actual_value: `azureADJoin.allowedToJoin: ${s}`, expected_value: 'selected or none', evidence: { 'הגדרה': s, 'מצב': s !== 'all' ? 'תקין ✓' : 'כל משתמש יכול לצרף מכשיר ✗' } }; }
+    case 'CIS-5.1.4.2': { const p = await graphGet(token, '/policies/deviceRegistrationPolicy').catch(() => null); const q = p?.userDeviceQuota; return { status: q != null && q <= 5 ? 'passed' : 'failed', actual_value: `userDeviceQuota: ${q ?? 'Unlimited'}`, expected_value: '≤ 5', evidence: { 'מכסה': q ?? 'Unlimited', 'מצב': q != null && q <= 5 ? 'תקין ✓' : 'הגדר מגבלה ✗' } }; }
+    case 'CIS-5.1.4.3': return { status: 'manual', actual_value: 'Cannot verify GA local admin setting via Graph API', expected_value: 'Global Administrator not auto local admin', evidence: { 'הערה': 'Entra admin center → Devices → Device settings → Additional local administrators' } };
+    case 'CIS-5.1.4.4': return { status: 'manual', actual_value: 'Cannot verify registering user local admin setting via Graph API', expected_value: 'Registering user not local admin', evidence: { 'הערה': 'Entra admin center → Devices → Device settings → Registering user is an administrator: Off' } };
+    case 'CIS-5.1.4.5': { const p = await graphGet(token, '/policies/deviceRegistrationPolicy').catch(() => null); const en = p?.localAdminPassword?.isEnabled; return { status: en === true ? 'passed' : 'failed', actual_value: `LAPS isEnabled: ${en}`, expected_value: 'true', evidence: { 'LAPS': en, 'מצב': en ? 'תקין ✓' : 'הפעל LAPS ✗' } }; }
+    case 'CIS-5.1.4.6': { const p = await graphGet(token, '/policies/deviceRegistrationPolicy').catch(() => null); const s = p?.selfServiceBitLockerEnabled; return { status: s === false ? 'passed' : 'warning', actual_value: `selfServiceBitLockerEnabled: ${s}`, expected_value: 'false', evidence: { 'ערך': s, 'הערה': 'Entra admin center → Devices → Device settings → Users can view BitLocker keys: No' } }; }
+
+    case 'CIS-5.1.5.1': { const p = await graphGet(token, '/policies/authorizationPolicy?$select=defaultUserRolePermissions'); const perms = p?.defaultUserRolePermissions?.permissionGrantPoliciesAssigned || []; const hasConsent = perms.some(x => typeof x === 'string' && (x.includes('ManagePermissionGrantsForSelf') || x.includes('microsoft-user-default-legacy'))); return { status: !hasConsent ? 'passed' : 'failed', actual_value: `permissionGrantPolicies: [${perms.join(', ')}]`, expected_value: 'No user consent policy', evidence: { 'מדיניות': perms.join(', ') || 'ריק', 'מצב': !hasConsent ? 'תקין ✓' : 'משתמשים יכולים לאשר אפליקציות ✗' } }; }
+    case 'CIS-5.1.5.2': { const p = await graphGet(token, '/policies/adminConsentRequestPolicy').catch(() => null); const en = p?.isEnabled; return { status: en === true ? 'passed' : 'failed', actual_value: `adminConsentWorkflow isEnabled: ${en}`, expected_value: 'true', evidence: { 'מופעל': en, 'מצב': en ? 'תקין ✓' : 'הפעל Admin consent workflow ✗' } }; }
+    case 'CIS-5.1.6.1': { const p = await graphGet(token, '/policies/authorizationPolicy?$select=allowInvitesFrom'); const v = p?.allowInvitesFrom || 'everyone'; return { status: v !== 'everyone' && v !== 'everyoneWithVerifiedEmail' ? 'passed' : 'failed', actual_value: `allowInvitesFrom: ${v}`, expected_value: '!= everyone', evidence: { 'הגדרה': v, 'מצב': v !== 'everyone' && v !== 'everyoneWithVerifiedEmail' ? 'תקין ✓' : 'כל אחד יכול להזמין אורחים ✗' } }; }
+    case 'CIS-5.1.6.2': { const p516 = await graphGet(token, '/policies/authorizationPolicy?$select=guestUserRoleId'); const v516 = p516?.guestUserRoleId; const ok516 = v516 === '10dae51f-b6af-4016-8d66-8c2a99b929b3' || v516 === 'bf6b6499-e8a3-423a-b71b-b3a194b5d56a'; return { status: ok516 ? 'passed' : 'failed', actual_value: `guestUserRoleId: ${v516}`, expected_value: 'Most restrictive guest role', evidence: { 'guestUserRoleId': v516, 'מצב': ok516 ? 'תקין ✓' : 'אורחים יכולים למנות ספריית ארגון ✗' } }; }
+    case 'CIS-5.1.6.3': { const p = await graphGet(token, '/policies/authorizationPolicy?$select=allowInvitesFrom'); const v = p?.allowInvitesFrom || 'everyone'; return { status: ['admins','adminsAndGuestInviters'].includes(v) ? 'passed' : 'failed', actual_value: `allowInvitesFrom: ${v}`, expected_value: 'admins or adminsAndGuestInviters', evidence: { 'הגדרה': v, 'מצב': ['admins','adminsAndGuestInviters'].includes(v) ? 'תקין ✓' : 'כל עובד יכול להזמין אורחים ✗' } }; }
+
+    case 'CIS-5.1.8.1': { const org = await graphGet(token, '/organization?$select=onPremisesSyncEnabled,onPremisesLastSyncDateTime'); const d = org.value?.[0] || {}; if (!d.onPremisesSyncEnabled) return { status: 'not_applicable', actual_value: 'Cloud-only', expected_value: 'N/A', evidence: {} }; const recent = d.onPremisesLastSyncDateTime && (new Date() - new Date(d.onPremisesLastSyncDateTime)) < 3 * 60 * 60 * 1000; return { status: recent ? 'passed' : 'warning', actual_value: `PHS last sync: ${d.onPremisesLastSyncDateTime || 'unknown'}`, expected_value: 'PHS sync recent', evidence: { 'סנכרון אחרון': d.onPremisesLastSyncDateTime || 'לא ידוע', 'מצב': recent ? 'תקין ✓' : 'סנכרון ישן ✗' } }; }
+
+    // --- ID Protection (CA checks) ---
+    case 'CIS-5.2.2.1': case 'CIS-5.2.2.2': case 'CIS-5.2.2.3': case 'CIS-5.2.2.4': case 'CIS-5.2.2.5': case 'CIS-5.2.2.6': case 'CIS-5.2.2.7': case 'CIS-5.2.2.8': case 'CIS-5.2.2.9': case 'CIS-5.2.2.10': case 'CIS-5.2.2.11': case 'CIS-5.2.2.12': {
+      const caData = await graphGet(token, '/identity/conditionalAccess/policies');
+      const enabled = (caData.value || []).filter(p => p.state === 'enabled');
+      const checkMap = {
+        'CIS-5.2.2.1': { label: 'MFA for admin roles', fn: p => hasMfaControl(p) && p.conditions?.users?.includeRoles?.length > 0 },
+        'CIS-5.2.2.2': { label: 'MFA for all users', fn: p => includesAllUsers(p) && hasMfaControl(p) },
+        'CIS-5.2.2.3': { label: 'Block legacy auth', fn: p => p.grantControls?.builtInControls?.includes('block') && p.conditions?.clientAppTypes?.some(t => ['exchangeActiveSync','other'].includes(t)) },
+        'CIS-5.2.2.4': { label: 'Admin session controls', fn: p => p.conditions?.users?.includeRoles?.length > 0 && (p.sessionControls?.signInFrequency?.isEnabled || p.sessionControls?.persistentBrowser?.isEnabled) },
+        'CIS-5.2.2.5': { label: 'Phishing-resistant MFA for admins', fn: p => p.conditions?.users?.includeRoles?.length > 0 && p.grantControls?.authenticationStrength?.displayName?.toLowerCase().includes('phish') },
+        'CIS-5.2.2.6': { label: 'User risk policy', fn: p => p.conditions?.userRiskLevels?.some(r => ['high','medium'].includes(r)) && (p.grantControls?.builtInControls?.includes('block') || p.grantControls?.builtInControls?.includes('passwordChange')) },
+        'CIS-5.2.2.7': { label: 'Sign-in risk policy', fn: p => p.conditions?.signInRiskLevels?.some(r => ['high','medium'].includes(r)) && (p.grantControls?.builtInControls?.includes('block') || hasMfaControl(p)) },
+        'CIS-5.2.2.8': { label: 'Med/High risk blocked', fn: p => p.conditions?.signInRiskLevels?.includes('high') && p.grantControls?.builtInControls?.includes('block') },
+        'CIS-5.2.2.9': { label: 'Managed device required', fn: p => p.grantControls?.builtInControls?.includes('compliantDevice') || p.grantControls?.builtInControls?.includes('domainJoinedDevice') },
+        'CIS-5.2.2.10': { label: 'Security info reg on managed device', fn: p => p.conditions?.applications?.includeUserActions?.includes('urn:user:registersecurityinfo') && (p.grantControls?.builtInControls?.includes('compliantDevice') || p.grantControls?.builtInControls?.includes('domainJoinedDevice')) },
+        'CIS-5.2.2.11': { label: 'Intune enrollment re-auth', fn: p => p.conditions?.applications?.includeApplications?.some(a => a === 'd4ebce55-015a-49b5-a083-c84d1797ae8c') && p.sessionControls?.signInFrequency?.type === 'everyTime' },
+        'CIS-5.2.2.12': { label: 'Block device code flow', fn: p => p.conditions?.authenticationFlows?.transferMethods?.includes('deviceCodeFlow') && p.grantControls?.builtInControls?.includes('block') },
+      };
+      const { label, fn } = checkMap[checkId];
+      const matching = enabled.filter(fn);
+      return { status: matching.length > 0 ? 'passed' : (checkId.includes('5') ? 'warning' : 'failed'), actual_value: `${matching.length} CA policy(ies): ${label}`, expected_value: `At least 1 CA policy for: ${label}`, evidence: { 'מדיניות': matching.map(p => p.displayName).join(', ') || 'אין', 'מצב': matching.length > 0 ? 'תקין ✓' : 'חסר ✗' } };
+    }
+
+    // --- Auth Methods ---
+    case 'CIS-5.2.3.1': {
+      const policy = await graphGet(token, '/policies/authenticationMethodsPolicy');
+      const authConfig = (policy.authenticationMethodConfigurations || []).find(m => m.id === 'MicrosoftAuthenticator');
+      if (!authConfig) return { status: 'warning', actual_value: 'Microsoft Authenticator config not found', expected_value: 'Number matching + additional context enabled', evidence: {} };
+      const numMatch = authConfig.featureSettings?.numberMatchingRequiredState?.state || 'default';
+      const addCtx = authConfig.featureSettings?.displayAppInformationRequiredState?.state || 'default';
+      return { status: numMatch === 'enabled' && addCtx === 'enabled' ? 'passed' : 'failed', actual_value: `numberMatching: ${numMatch}, additionalContext: ${addCtx}`, expected_value: 'Both = enabled', evidence: { 'Number Matching': numMatch, 'Additional Context': addCtx, 'מצב': numMatch === 'enabled' && addCtx === 'enabled' ? 'תקין ✓' : 'הפעל Anti-fatigue features ✗' } };
+    }
+    case 'CIS-5.2.3.2': return { status: 'manual', actual_value: 'Cannot verify custom banned passwords list via Graph API', expected_value: 'Custom banned passwords list in Enforced mode', evidence: { 'הערה': 'Entra admin center → Protection → Authentication methods → Password protection → Custom banned passwords: Enforced' } };
+    case 'CIS-5.2.3.3': return { status: 'manual', actual_value: 'Cannot verify on-prem password protection via Graph API', expected_value: 'DC Agent installed, Mode = Enforced', evidence: { 'הערה': 'Entra admin center → Protection → Authentication methods → Password protection → On-premises: Enforced' } };
+
+    case 'CIS-5.2.3.4': {
+      const data534 = await graphGet(token, "/reports/authenticationMethods/userRegistrationDetails?$select=userPrincipalName,isMfaCapable&$top=100&$filter=userType eq 'member'").catch(() => null);
+      if (!data534) return { status: 'warning', actual_value: 'Cannot access reports - needs Reports.Read.All', expected_value: '100% members MFA capable', evidence: {} };
+      const users534 = data534.value || [];
+      const notCapable = users534.filter(u => !u.isMfaCapable);
+      return { status: notCapable.length === 0 ? 'passed' : 'failed', actual_value: `${notCapable.length}/${users534.length} not MFA capable`, expected_value: '100% MFA capable', evidence: { 'סך משתמשים': users534.length, 'לא מסוגלים': notCapable.length, 'מצב': notCapable.length === 0 ? 'תקין ✓' : 'יש משתמשים ללא MFA ✗' } };
+    }
+
+    case 'CIS-5.2.3.5': { const p = await graphGet(token, '/policies/authenticationMethodsPolicy'); const sms = (p.authenticationMethodConfigurations || []).find(m => m.id === 'Sms'); const voice = (p.authenticationMethodConfigurations || []).find(m => m.id === 'Voice'); return { status: sms?.state !== 'enabled' && voice?.state !== 'enabled' ? 'passed' : 'failed', actual_value: `SMS: ${sms?.state}, Voice: ${voice?.state}`, expected_value: 'Both disabled', evidence: { 'SMS': sms?.state, 'Voice': voice?.state, 'מצב': sms?.state !== 'enabled' && voice?.state !== 'enabled' ? 'תקין ✓' : 'שיטות חלשות פעילות ✗' } }; }
+    case 'CIS-5.2.3.6': { const p = await graphGet(token, '/policies/authenticationMethodsPolicy?$select=systemCredentialPreferences'); const s = p?.systemCredentialPreferences?.state; return { status: s === 'enabled' ? 'passed' : 'warning', actual_value: `systemCredentialPreferences: ${s}`, expected_value: 'enabled', evidence: { 'מצב': s, 'תוצאה': s === 'enabled' ? 'תקין ✓' : 'הפעל ✗' } }; }
+    case 'CIS-5.2.3.7': { const p = await graphGet(token, '/policies/authenticationMethodsPolicy'); const em = (p.authenticationMethodConfigurations || []).find(m => m.id === 'Email'); return { status: em?.state !== 'enabled' ? 'passed' : 'failed', actual_value: `Email OTP: ${em?.state || 'not found'}`, expected_value: 'disabled', evidence: { 'Email OTP': em?.state || 'לא נמצא', 'מצב': em?.state !== 'enabled' ? 'תקין ✓' : 'כבה Email OTP ✗' } }; }
+    case 'CIS-5.2.4.1': { const p = await graphGet(token, '/policies/authenticationMethodsPolicy').catch(() => null); const sspr = p?.selfServicePasswordReset; const st = sspr?.state || 'unknown'; const m = (sspr?.authenticationMethodConfigurations || []).filter(x => x.state === 'enabled').length; return { status: (st === 'enabled' || st === 'enabledForAllUsers') && m >= 2 ? 'passed' : 'failed', actual_value: `SSPR: ${st}, methods: ${m}`, expected_value: 'Enabled for all, ≥2 methods', evidence: { 'SSPR state': st, 'שיטות': m, 'מצב': st === 'enabled' && m >= 2 ? 'תקין ✓' : 'בדוק ✗' } }; }
+
+    // --- ID Governance (PIM) ---
+    case 'CIS-5.3.1': { const pim = await graphGet(token, "/roleManagement/directory/roleAssignmentScheduleInstances?$filter=assignmentType eq 'Assigned'&$select=principalId,roleDefinitionId&$top=50").catch(() => null); if (!pim) return { status: 'warning', actual_value: 'Cannot access PIM - needs RoleManagement.Read.All', expected_value: 'All roles via PIM (Eligible)', evidence: {} }; const permanent = pim.value || []; return { status: permanent.length === 0 ? 'passed' : 'warning', actual_value: `${permanent.length} permanent role assignment(s)`, expected_value: 'All roles Eligible (not Permanent)', evidence: { 'קצאות קבועות': permanent.length, 'מצב': permanent.length === 0 ? 'תקין ✓' : 'יש הקצאות קבועות ✗' } }; }
+    case 'CIS-5.3.2': { const rev = await graphGet(token, '/identityGovernance/accessReviews/definitions?$top=50').catch(() => null); if (!rev) return { status: 'warning', actual_value: 'Cannot access access reviews - needs AccessReview.Read.All', expected_value: 'Recurring review for guests', evidence: {} }; const guest = (rev.value || []).filter(r => JSON.stringify(r.scope || {}).toLowerCase().includes('guest')); return { status: guest.length > 0 ? 'passed' : 'failed', actual_value: `${guest.length} guest access review(s)`, expected_value: 'Recurring access review for all guests', evidence: { 'ביקורות': guest.map(r => r.displayName).join(', ') || 'אין', 'מצב': guest.length > 0 ? 'תקין ✓' : 'צור access review לאורחים ✗' } }; }
+    case 'CIS-5.3.3': { const rev = await graphGet(token, '/identityGovernance/accessReviews/definitions?$top=50').catch(() => null); if (!rev) return { status: 'warning', actual_value: 'Cannot access access reviews', expected_value: 'Recurring review for privileged roles', evidence: {} }; const roleRev = (rev.value || []).filter(r => JSON.stringify(r.scope || {}).toLowerCase().includes('role')); return { status: roleRev.length > 0 ? 'passed' : 'failed', actual_value: `${roleRev.length} privileged role review(s)`, expected_value: 'Recurring access review for privileged roles', evidence: { 'ביקורות': roleRev.map(r => r.displayName).join(', ') || 'אין', 'מצב': roleRev.length > 0 ? 'תקין ✓' : 'צור access review לתפקידים ✗' } }; }
+    case 'CIS-5.3.4': return { status: 'manual', actual_value: 'Cannot verify PIM approval for Global Admin via Graph API', expected_value: 'PIM Global Admin: Require approval = Yes', evidence: { 'הערה': 'Entra admin center → Identity governance → PIM → Entra roles → Global Administrator → Settings → Require approval: Yes' } };
+    case 'CIS-5.3.5': return { status: 'manual', actual_value: 'Cannot verify PIM approval for Privileged Role Admin via Graph API', expected_value: 'PIM Privileged Role Admin: Require approval = Yes', evidence: { 'הערה': 'Entra admin center → Identity governance → PIM → Entra roles → Privileged Role Administrator → Settings → Require approval: Yes' } };
+
+    // --- Teams Extended ---
+    case 'CIS-8.1.1': case 'CIS-8.1.2': case 'CIS-8.2.1': case 'CIS-8.2.2': case 'CIS-8.5.1': case 'CIS-8.5.2': case 'CIS-8.5.3': case 'CIS-8.5.9': {
+      const scoreT = await getSecureScoreControls(token);
+      const kwT = { 'CIS-8.1.1': ['TeamsFileSharing','CloudStorage'], 'CIS-8.1.2': ['ChannelEmail','channelemail'], 'CIS-8.2.1': ['TeamsExternal','FederationExternal'], 'CIS-8.2.2': ['UnmanagedTeams','ConsumerTeams'], 'CIS-8.5.1': ['AnonymousJoin','AllowAnonymous'], 'CIS-8.5.2': ['AnonymousStart','AnonymousMeeting'], 'CIS-8.5.3': ['LobbyBypass','AutoAdmit'], 'CIS-8.5.9': ['MeetingRecording','AllowRecording'] };
+      const noteT = { 'CIS-8.1.1': 'Teams Admin → Teams apps → 3rd party cloud storage: Off', 'CIS-8.1.2': 'Teams Admin → Teams settings → Email integration: Off', 'CIS-8.2.1': 'Teams Admin → Users → External access → Specific domains only', 'CIS-8.2.2': 'Teams Admin → Users → External access → Block unmanaged Teams users', 'CIS-8.5.1': 'Teams Admin → Meetings → Meeting policies → Anonymous users cannot join', 'CIS-8.5.2': 'Teams Admin → Meetings → Allow anonymous users to start: Off', 'CIS-8.5.3': 'Teams Admin → Meetings → Who can bypass lobby: People in my org', 'CIS-8.5.9': 'Teams Admin → Meetings → Recording: Off' };
+      const kws = kwT[checkId] || [];
+      let ctrl = null; for (const kw of kws) { ctrl = getControl(scoreT, kw); if (ctrl) break; }
+      if (ctrl) { const impl = ctrl.score > 0; return { status: impl ? 'passed' : 'warning', actual_value: `${ctrl.controlName}: ${ctrl.score}/${ctrl.maxScore}`, expected_value: 'Implemented', evidence: { 'ציון': `${ctrl.score}/${ctrl.maxScore}`, 'מצב': impl ? 'תקין ✓' : 'בדוק ✗' } }; }
+      return { status: 'manual', actual_value: 'Teams API not accessible via standard Graph', expected_value: 'See Teams Admin Center', evidence: { 'הערה': noteT[checkId] || 'Teams Admin Center' } };
+    }
+
+    case 'CIS-8.2.3': case 'CIS-8.2.4': case 'CIS-8.5.4': case 'CIS-8.5.5': case 'CIS-8.5.6': case 'CIS-8.5.7': case 'CIS-8.5.8': case 'CIS-8.6.1': {
+      const noteT2 = { 'CIS-8.2.3': 'Teams Admin → External access → External users cannot initiate chats', 'CIS-8.2.4': 'Teams Admin → External access → Block trial tenants', 'CIS-8.5.4': 'Teams Admin → Meetings → Dial-in lobby bypass: Off', 'CIS-8.5.5': 'Teams Admin → Meetings → Chat: Enabled for everyone except anonymous', 'CIS-8.5.6': 'Teams Admin → Meetings → Who can present: Only organizers', 'CIS-8.5.7': 'Teams Admin → Meetings → External participants can give control: Off', 'CIS-8.5.8': 'Teams Admin → Meetings → External users chat in meetings: Off', 'CIS-8.6.1': 'Teams Admin → Messaging policies → Report a security concern: On' };
+      return { status: 'manual', actual_value: 'Teams API not accessible via standard Graph (requires Teams PowerShell)', expected_value: 'See Teams Admin Center', evidence: { 'הערה': noteT2[checkId] || 'Teams Admin Center' } };
+    }
+
+    // --- Microsoft Fabric ---
+    case 'CIS-9.1.1': case 'CIS-9.1.2': case 'CIS-9.1.3': case 'CIS-9.1.4': case 'CIS-9.1.5':
+    case 'CIS-9.1.6': case 'CIS-9.1.7': case 'CIS-9.1.8': case 'CIS-9.1.9': case 'CIS-9.1.10':
+    case 'CIS-9.1.11': case 'CIS-9.1.12':
+      return { status: 'manual', actual_value: 'Microsoft Fabric settings not accessible via Microsoft Graph API', expected_value: 'See Fabric admin portal', evidence: { 'הערה': 'app.powerbi.com/admin-portal/tenantSettings', 'API נדרש': 'Power BI Fabric Admin API' } };
+
     // --- Exchange Extended (via Exchange REST API) ---
     case 'CIS-6.5.2': {
-      const orgId = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
-      const org = orgId && _exToken ? await exchangeGet(orgId, 'Organization') : null;
-      const orgData = org?.value?.[0] || org;
-      if (orgData?.MailTipsExternalRecipientsTipsEnabled !== undefined) {
-        const enabled = orgData.MailTipsExternalRecipientsTipsEnabled;
-        return { status: enabled ? 'passed' : 'failed', actual_value: `MailTipsExternalRecipientsTipsEnabled: ${enabled}`, expected_value: 'true', evidence: { 'MailTips חיצוני': enabled, 'מצב': enabled ? 'תקין ✓' : 'כבה MailTips חיצוני ✗' } };
+      const orgId652 = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
+      const org652 = orgId652 && _exToken ? await exchangeGet(orgId652, 'Organization') : null;
+      const orgData652 = org652?.value?.[0] || org652;
+      if (orgData652?.MailTipsExternalRecipientsTipsEnabled !== undefined) {
+        const enabled = orgData652.MailTipsExternalRecipientsTipsEnabled;
+        return { status: enabled ? 'passed' : 'failed', actual_value: `MailTipsExternalRecipientsTipsEnabled: ${enabled}`, expected_value: 'true', evidence: { 'MailTips': enabled, 'מצב': enabled ? 'תקין ✓' : 'כבה ✗' } };
       }
-      return { status: 'manual', actual_value: 'Exchange API not accessible', expected_value: 'MailTipsExternalRecipientsTipsEnabled = true', evidence: { 'הערה': 'Exchange Admin Center → Settings → Mail tips → External recipients' } };
+      return { status: 'manual', actual_value: 'Exchange API not accessible', expected_value: 'true', evidence: { 'הערה': 'Exchange Admin Center → Settings → Mail tips → External recipients' } };
     }
-
     case 'CIS-6.5.4': {
-      const orgId = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
-      const org = orgId && _exToken ? await exchangeGet(orgId, 'Organization') : null;
-      const orgData = org?.value?.[0] || org;
-      if (orgData?.SmtpClientAuthenticationDisabled !== undefined) {
-        const disabled = orgData.SmtpClientAuthenticationDisabled;
-        return { status: disabled ? 'passed' : 'failed', actual_value: `SmtpClientAuthenticationDisabled: ${disabled}`, expected_value: 'true', evidence: { 'SMTP AUTH מושבת': disabled, 'מצב': disabled ? 'תקין ✓' : 'SMTP AUTH פעיל ✗' } };
+      const orgId654 = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
+      const org654 = orgId654 && _exToken ? await exchangeGet(orgId654, 'Organization') : null;
+      const orgData654 = org654?.value?.[0] || org654;
+      if (orgData654?.SmtpClientAuthenticationDisabled !== undefined) {
+        const disabled = orgData654.SmtpClientAuthenticationDisabled;
+        return { status: disabled ? 'passed' : 'failed', actual_value: `SmtpClientAuthenticationDisabled: ${disabled}`, expected_value: 'true', evidence: { 'SMTP AUTH': disabled, 'מצב': disabled ? 'תקין ✓' : 'SMTP AUTH פעיל ✗' } };
       }
-      return { status: 'manual', actual_value: 'Exchange API not accessible', expected_value: 'SmtpClientAuthenticationDisabled = true', evidence: { 'הערה': 'Exchange Admin Center → Settings → Modern authentication → Disable SMTP AUTH' } };
+      return { status: 'manual', actual_value: 'Exchange API not accessible', expected_value: 'true', evidence: { 'הערה': 'Exchange Admin Center → Settings → Modern authentication → Disable SMTP AUTH' } };
     }
-
     case 'CIS-6.5.3': {
-      const orgId = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
-      const policies = orgId && _exToken ? await exchangeGet(orgId, 'OwaMailboxPolicy') : null;
-      const defaultPolicy = (policies?.value || []).find(p => p.Name === 'OwaMailboxPolicy-Default') || (policies?.value || [])[0];
-      if (defaultPolicy?.AdditionalStorageProvidersAvailable !== undefined) {
-        const restricted = !defaultPolicy.AdditionalStorageProvidersAvailable;
-        return { status: restricted ? 'passed' : 'failed', actual_value: `AdditionalStorageProvidersAvailable: ${defaultPolicy.AdditionalStorageProvidersAvailable}`, expected_value: 'false', evidence: { 'אחסון נוסף': defaultPolicy.AdditionalStorageProvidersAvailable, 'מדיניות': defaultPolicy.Name, 'מצב': restricted ? 'תקין ✓' : 'אחסון חיצוני פתוח ✗' } };
+      const orgId653 = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
+      const policies653 = orgId653 && _exToken ? await exchangeGet(orgId653, 'OwaMailboxPolicy') : null;
+      const dp = (policies653?.value || []).find(p => p.Name === 'OwaMailboxPolicy-Default') || (policies653?.value || [])[0];
+      if (dp?.AdditionalStorageProvidersAvailable !== undefined) {
+        return { status: !dp.AdditionalStorageProvidersAvailable ? 'passed' : 'failed', actual_value: `AdditionalStorageProvidersAvailable: ${dp.AdditionalStorageProvidersAvailable}`, expected_value: 'false', evidence: { 'Storage': dp.AdditionalStorageProvidersAvailable, 'מצב': !dp.AdditionalStorageProvidersAvailable ? 'תקין ✓' : 'אחסון חיצוני פתוח ✗' } };
       }
-      return { status: 'manual', actual_value: 'Exchange API not accessible', expected_value: 'AdditionalStorageProvidersAvailable = false', evidence: { 'הערה': 'Exchange Admin Center → OWA policies → Default → Features → Third-party storage: Off' } };
+      return { status: 'manual', actual_value: 'Exchange API not accessible', expected_value: 'false', evidence: { 'הערה': 'Exchange Admin Center → OWA policies → Default → Features → Third-party storage: Off' } };
     }
-
     case 'CIS-6.2.3': {
-      const orgId = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
-      const rules = orgId && _exToken ? await exchangeGet(orgId, 'TransportRule') : null;
-      if (rules?.value) {
-        const externalTagRule = rules.value.filter(r => JSON.stringify(r).toLowerCase().includes('external') && (JSON.stringify(r).toLowerCase().includes('disclaimer') || JSON.stringify(r).toLowerCase().includes('prepend') || JSON.stringify(r).toLowerCase().includes('subject')));
-        return { status: externalTagRule.length > 0 ? 'passed' : 'failed', actual_value: `${externalTagRule.length} transport rule(s) tagging external senders`, expected_value: 'Rule prepending [External] to emails', evidence: { 'חוקים': externalTagRule.map(r => r.Name).join(', ') || 'אין', 'סה"כ חוקים': rules.value.length, 'מצב': externalTagRule.length > 0 ? 'תקין ✓' : 'אין תיוג שולחים חיצוניים ✗' } };
+      const orgId623 = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
+      const rules623 = orgId623 && _exToken ? await exchangeGet(orgId623, 'TransportRule') : null;
+      if (rules623?.value) {
+        const ext = rules623.value.filter(r => JSON.stringify(r).toLowerCase().includes('external') && (JSON.stringify(r).toLowerCase().includes('disclaimer') || JSON.stringify(r).toLowerCase().includes('prepend')));
+        return { status: ext.length > 0 ? 'passed' : 'failed', actual_value: `${ext.length} external sender tag rule(s)`, expected_value: 'Rule tagging external senders', evidence: { 'חוקים': ext.map(r => r.Name).join(', ') || 'אין', 'מצב': ext.length > 0 ? 'תקין ✓' : 'אין תיוג חיצוני ✗' } };
       }
-      return { status: 'manual', actual_value: 'Exchange API not accessible', expected_value: 'Transport rule identifies external senders', evidence: { 'הערה': 'Exchange Admin Center → Mail flow → Rules → Create rule adding [External] prefix' } };
+      return { status: 'manual', actual_value: 'Exchange API not accessible', expected_value: 'Transport rule tags external senders', evidence: { 'הערה': 'Exchange Admin Center → Mail flow → Rules → Add [External] prefix' } };
     }
-
     case 'CIS-6.2.2': {
-      const orgId = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
-      const rules = orgId && _exToken ? await exchangeGet(orgId, 'TransportRule') : null;
-      if (rules?.value) {
-        const bypassRules = rules.value.filter(r => JSON.stringify(r).includes('-1') || JSON.stringify(r).toLowerCase().includes('scl'));
-        return { status: bypassRules.length === 0 ? 'passed' : 'failed', actual_value: `${bypassRules.length} rule(s) potentially bypassing spam (SCL=-1)`, expected_value: 'No transport rules setting SCL=-1', evidence: { 'חוקים חשודים': bypassRules.map(r => r.Name).join(', ') || 'אין', 'סה"כ חוקים': rules.value.length, 'מצב': bypassRules.length === 0 ? 'תקין ✓' : 'בדוק חוקי transport ✗' } };
+      const orgId622 = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
+      const rules622 = orgId622 && _exToken ? await exchangeGet(orgId622, 'TransportRule') : null;
+      if (rules622?.value) {
+        const bypass = rules622.value.filter(r => JSON.stringify(r).includes('-1') || JSON.stringify(r).toLowerCase().includes('scl'));
+        return { status: bypass.length === 0 ? 'passed' : 'failed', actual_value: `${bypass.length} SCL=-1 rule(s)`, expected_value: 'No SCL=-1 rules', evidence: { 'חוקים': bypass.map(r => r.Name).join(', ') || 'אין', 'מצב': bypass.length === 0 ? 'תקין ✓' : 'בדוק ✗' } };
       }
-      return { status: 'manual', actual_value: 'Exchange API not accessible', expected_value: 'No transport rules setting SCL=-1', evidence: { 'הערה': 'Exchange Admin Center → Mail flow → Rules → בדוק rules עם SCL=-1' } };
+      return { status: 'manual', actual_value: 'Exchange API not accessible', expected_value: 'No SCL=-1 rules', evidence: { 'הערה': 'Exchange Admin Center → Mail flow → Rules → בדוק SCL=-1' } };
     }
-
     case 'CIS-6.1.3': {
-      const orgId = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
-      const org = orgId && _exToken ? await exchangeGet(orgId, 'Organization') : null;
-      const orgData = org?.value?.[0] || org;
-      if (orgData) {
-        return { status: orgData.AuditDisabled === false || orgData.AuditDisabled === undefined ? 'passed' : 'warning', actual_value: `Exchange org accessible; AuditDisabled: ${orgData.AuditDisabled ?? false}`, expected_value: 'No mailboxes with AuditBypassEnabled = true', evidence: { 'AuditDisabled': orgData.AuditDisabled ?? false, 'הערה': 'בדוק per-mailbox bypass ידנית' } };
-      }
-      return { status: 'manual', actual_value: 'Exchange API not accessible', expected_value: 'No mailboxes with AuditBypassEnabled = true', evidence: { 'הערה': 'PowerShell: Get-MailboxAuditBypassAssociation | Where { $_.AuditBypassEnabled -eq $true }' } };
+      const orgId613 = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
+      const org613 = orgId613 && _exToken ? await exchangeGet(orgId613, 'Organization') : null;
+      const d613 = org613?.value?.[0] || org613;
+      if (d613) return { status: d613.AuditDisabled === false || d613.AuditDisabled === undefined ? 'passed' : 'warning', actual_value: `AuditDisabled: ${d613.AuditDisabled ?? false}`, expected_value: 'No mailboxes with AuditBypass', evidence: { 'AuditDisabled': d613.AuditDisabled ?? false } };
+      return { status: 'manual', actual_value: 'Exchange API not accessible', expected_value: 'No AuditBypass', evidence: { 'הערה': 'PowerShell: Get-MailboxAuditBypassAssociation' } };
     }
-
     case 'CIS-6.5.5': {
-      const orgId = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
-      const connectors = orgId && _exToken ? await exchangeGet(orgId, 'InboundConnector') : null;
-      if (connectors?.value) {
-        return { status: 'warning', actual_value: `${connectors.value.length} inbound connector(s) found`, expected_value: 'No direct send / unauthenticated connectors', evidence: { 'Connectors': connectors.value.map(c => c.Name).join(', ') || 'אין', 'הערה': 'בדוק ידנית שאין Direct Send connectors' } };
-      }
-      return { status: 'manual', actual_value: 'Exchange API not accessible', expected_value: 'Direct Send rejected', evidence: { 'הערה': 'Exchange Admin Center → Mail flow → Connectors' } };
+      const orgId655 = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
+      const conn = orgId655 && _exToken ? await exchangeGet(orgId655, 'InboundConnector') : null;
+      if (conn?.value) return { status: 'warning', actual_value: `${conn.value.length} inbound connector(s)`, expected_value: 'No Direct Send', evidence: { 'Connectors': conn.value.map(c => c.Name).join(', ') || 'אין' } };
+      return { status: 'manual', actual_value: 'Exchange API not accessible', expected_value: 'No Direct Send', evidence: { 'הערה': 'Exchange Admin Center → Mail flow → Connectors' } };
     }
-
-    // --- SharePoint Extended (via Graph /admin/sharepoint/settings) ---
-    case 'CIS-7.2.6': {
-      const spo = await getSpoSettings(token);
-      if (!spo) return { status: 'manual', actual_value: 'Cannot access SharePoint settings', expected_value: 'sharingCapability ≤ ExistingExternalUserSharingOnly', evidence: { 'הערה': 'SharePoint Admin Center → Policies → Sharing' } };
-      const cap = spo.sharingCapability;
-      const isSecure = ['disabled', 'existingExternalUserSharingOnly'].includes((cap || '').toLowerCase());
-      return { status: isSecure ? 'passed' : 'failed', actual_value: `sharingCapability: ${cap}`, expected_value: 'Disabled or ExistingExternalUserSharingOnly', evidence: { sharingCapability: cap, 'מצב': isSecure ? 'תקין ✓' : 'שיתוף Anonymous פעיל ✗' } };
-    }
-
-    case 'CIS-7.2.7': {
-      const spo = await getSpoSettings(token);
-      if (!spo) return { status: 'manual', actual_value: 'Cannot access SharePoint settings', expected_value: 'defaultSharingLinkType = direct', evidence: { 'הערה': 'SharePoint Admin Center → Policies → Sharing → Default link type' } };
-      const link = spo.defaultSharingLinkType;
-      return { status: link === 'direct' ? 'passed' : 'failed', actual_value: `defaultSharingLinkType: ${link}`, expected_value: 'direct (Specific people)', evidence: { defaultSharingLinkType: link, 'מצב': link === 'direct' ? 'תקין ✓' : 'קישור ברירת מחדל לא מוגבל ✗' } };
-    }
-
-    case 'CIS-7.2.11': {
-      const spo = await getSpoSettings(token);
-      if (!spo) return { status: 'manual', actual_value: 'Cannot access SharePoint settings', expected_value: 'defaultLinkPermission = view', evidence: { 'הערה': 'SharePoint Admin Center → Policies → Sharing → Default link permission' } };
-      const perm = spo.defaultLinkPermission;
-      return { status: perm === 'view' ? 'passed' : 'failed', actual_value: `defaultLinkPermission: ${perm}`, expected_value: 'view', evidence: { defaultLinkPermission: perm, 'מצב': perm === 'view' ? 'תקין ✓' : 'הרשאת Edit כברירת מחדל ✗' } };
-    }
-
-    case 'CIS-7.2.9': {
-      const spo = await getSpoSettings(token);
-      if (!spo) return { status: 'manual', actual_value: 'Cannot access SharePoint settings', expected_value: 'Guest access expires automatically', evidence: { 'הערה': 'SharePoint Admin Center → Policies → Sharing → Guest access expiration' } };
-      const required = spo.requireExternalUserExpirationRequired ?? spo.externalUserExpirationRequired;
-      const days = spo.externalUserExpireInDays;
-      return { status: required && days && days <= 30 ? 'passed' : required ? 'warning' : 'failed', actual_value: `expirationRequired: ${required}, expireInDays: ${days}`, expected_value: 'Expiration = true, days ≤ 30', evidence: { 'פקיעה נדרשת': required, 'ימים לפקיעה': days, 'מצב': required && days <= 30 ? 'תקין ✓' : 'הגדר פקיעת גישת אורח ✗' } };
-    }
-
-    case 'CIS-7.2.5': {
-      const spo = await getSpoSettings(token);
-      if (!spo) return { status: 'manual', actual_value: 'Cannot access SharePoint settings', expected_value: 'isResharingByExternalUsersEnabled = false', evidence: { 'הערה': 'SharePoint Admin Center → Policies → Sharing → Allow guests to share' } };
-      const canReshare = spo.isResharingByExternalUsersEnabled ?? spo.allowGuestUserShareToUsersNotInSiteCollection;
-      return { status: canReshare === false ? 'passed' : 'failed', actual_value: `isResharingByExternalUsersEnabled: ${canReshare}`, expected_value: 'false', evidence: { 'אורחים יכולים לשתף מחדש': canReshare, 'מצב': canReshare === false ? 'תקין ✓' : 'אורחים יכולים לשתף תוכן מחדש ✗' } };
-    }
-
-    case 'CIS-7.2.2': {
-      const spo = await getSpoSettings(token);
-      if (!spo) return { status: 'manual', actual_value: 'Cannot access SharePoint settings', expected_value: 'isAzureADB2BEnabled = true', evidence: { 'הערה': 'SharePoint Admin Center → Settings → SharePoint and OneDrive integration' } };
-      const b2b = spo.isAzureADB2BEnabled ?? spo.enableAzureADB2BIntegration;
-      return { status: b2b === true ? 'passed' : 'failed', actual_value: `isAzureADB2BEnabled: ${b2b}`, expected_value: 'true', evidence: { 'B2B Integration': b2b, 'מצב': b2b ? 'תקין ✓' : 'הפעל Azure AD B2B Integration ✗' } };
-    }
-
-    case 'CIS-7.3.2': {
-      const spo = await getSpoSettings(token);
-      if (!spo) return { status: 'manual', actual_value: 'Cannot access SharePoint settings', expected_value: 'Sync restricted to managed devices', evidence: { 'הערה': 'SharePoint Admin Center → Settings → Sync → Allow only on specific domains' } };
-      const allowedGuids = spo.allowedDomainGuidsForSyncApp;
-      const isRestricted = Array.isArray(allowedGuids) ? allowedGuids.length > 0 : !!allowedGuids;
-      return { status: isRestricted ? 'passed' : 'failed', actual_value: `allowedDomainGuidsForSyncApp: ${JSON.stringify(allowedGuids)}`, expected_value: 'At least one domain GUID defined', evidence: { 'GUIDs מוגדרים': isRestricted, 'ערך': JSON.stringify(allowedGuids), 'מצב': isRestricted ? 'תקין ✓' : 'סנכרון פתוח לכל מכשיר ✗' } };
-    }
-
-    case 'CIS-7.2.8': {
-      const spo = await getSpoSettings(token);
-      if (!spo) return { status: 'manual', actual_value: 'Cannot access SharePoint settings', expected_value: 'Sharing restricted to specific domains', evidence: { 'הערה': 'SharePoint Admin Center → Policies → Sharing → Limit sharing by domain' } };
-      const mode = spo.sharingDomainRestrictionMode;
-      return { status: mode && mode !== 'none' ? 'passed' : 'warning', actual_value: `sharingDomainRestrictionMode: ${mode}`, expected_value: 'AllowList or BlockList', evidence: { 'מצב הגבלה': mode, 'תוצאה': mode && mode !== 'none' ? 'תקין ✓' : 'שיתוף ללא הגבלת דומיינים ✗' } };
-    }
-
-    case 'CIS-7.2.10': {
-      const spo = await getSpoSettings(token);
-      if (!spo) return { status: 'manual', actual_value: 'Cannot access SharePoint settings', expected_value: 'Email attestation re-auth ≤ 30 days', evidence: { 'הערה': 'SharePoint Admin Center → Policies → Sharing → Verification code expiration' } };
-      const required = spo.emailAttestationRequired;
-      const days = spo.emailAttestationReAuthDays;
-      return { status: required && days && days <= 30 ? 'passed' : required ? 'warning' : 'failed', actual_value: `emailAttestationRequired: ${required}, reAuthDays: ${days}`, expected_value: 'Required = true, days ≤ 30', evidence: { 'attestation נדרש': required, 'ימים': days, 'מצב': required && days <= 30 ? 'תקין ✓' : 'הגדר אימות קוד ✗' } };
-    }
+    // SharePoint Extended
+    case 'CIS-7.2.6': { const spo = await getSpoSettings(token); if (!spo) return { status: 'manual', actual_value: 'Cannot access SharePoint settings', expected_value: 'sharingCapability = Disabled/ExistingOnly', evidence: {} }; const cap = spo.sharingCapability; const ok = ['disabled','existingExternalUserSharingOnly'].includes((cap||'').toLowerCase()); return { status: ok ? 'passed' : 'failed', actual_value: `sharingCapability: ${cap}`, expected_value: 'Disabled or ExistingExternalUserSharingOnly', evidence: { sharingCapability: cap, 'מצב': ok ? 'תקין ✓' : 'Anonymous פעיל ✗' } }; }
+    case 'CIS-7.2.7': { const spo = await getSpoSettings(token); if (!spo) return { status: 'manual', actual_value: 'Cannot access SharePoint settings', expected_value: 'direct', evidence: {} }; const v = spo.defaultSharingLinkType; return { status: v === 'direct' ? 'passed' : 'failed', actual_value: `defaultSharingLinkType: ${v}`, expected_value: 'direct', evidence: { 'Link Type': v, 'מצב': v === 'direct' ? 'תקין ✓' : 'לא מוגבל ✗' } }; }
+    case 'CIS-7.2.11': { const spo = await getSpoSettings(token); if (!spo) return { status: 'manual', actual_value: 'Cannot access SharePoint settings', expected_value: 'view', evidence: {} }; const v = spo.defaultLinkPermission; return { status: v === 'view' ? 'passed' : 'failed', actual_value: `defaultLinkPermission: ${v}`, expected_value: 'view', evidence: { 'Permission': v, 'מצב': v === 'view' ? 'תקין ✓' : 'Edit כברירת מחדל ✗' } }; }
+    case 'CIS-7.2.9': { const spo = await getSpoSettings(token); if (!spo) return { status: 'manual', actual_value: 'Cannot access SharePoint settings', expected_value: 'Guest expires ≤30d', evidence: {} }; const req = spo.requireExternalUserExpirationRequired ?? spo.externalUserExpirationRequired; const d = spo.externalUserExpireInDays; return { status: req && d && d <= 30 ? 'passed' : req ? 'warning' : 'failed', actual_value: `required: ${req}, days: ${d}`, expected_value: 'true, ≤30d', evidence: { 'Required': req, 'Days': d, 'מצב': req && d <= 30 ? 'תקין ✓' : 'הגדר פקיעה ✗' } }; }
+    case 'CIS-7.2.5': { const spo = await getSpoSettings(token); if (!spo) return { status: 'manual', actual_value: 'Cannot access SharePoint settings', expected_value: 'false', evidence: {} }; const v = spo.isResharingByExternalUsersEnabled ?? spo.allowGuestUserShareToUsersNotInSiteCollection; return { status: v === false ? 'passed' : 'failed', actual_value: `isResharingByExternalUsersEnabled: ${v}`, expected_value: 'false', evidence: { 'Resharing': v, 'מצב': v === false ? 'תקין ✓' : 'אורחים יכולים לשתף ✗' } }; }
+    case 'CIS-7.2.2': { const spo = await getSpoSettings(token); if (!spo) return { status: 'manual', actual_value: 'Cannot access SharePoint settings', expected_value: 'true', evidence: {} }; const v = spo.isAzureADB2BEnabled ?? spo.enableAzureADB2BIntegration; return { status: v === true ? 'passed' : 'failed', actual_value: `isAzureADB2BEnabled: ${v}`, expected_value: 'true', evidence: { 'B2B': v, 'מצב': v ? 'תקין ✓' : 'הפעל B2B ✗' } }; }
+    case 'CIS-7.3.2': { const spo = await getSpoSettings(token); if (!spo) return { status: 'manual', actual_value: 'Cannot access SharePoint settings', expected_value: 'GUIDs configured', evidence: {} }; const v = spo.allowedDomainGuidsForSyncApp; const ok = Array.isArray(v) ? v.length > 0 : !!v; return { status: ok ? 'passed' : 'failed', actual_value: `allowedDomainGuids: ${JSON.stringify(v)}`, expected_value: 'At least 1 GUID', evidence: { 'GUIDs': ok, 'מצב': ok ? 'תקין ✓' : 'סנכרון פתוח לכל ✗' } }; }
+    case 'CIS-7.2.8': { const spo = await getSpoSettings(token); if (!spo) return { status: 'manual', actual_value: 'Cannot access SharePoint settings', expected_value: 'AllowList/BlockList', evidence: {} }; const m = spo.sharingDomainRestrictionMode; return { status: m && m !== 'none' ? 'passed' : 'warning', actual_value: `sharingDomainRestrictionMode: ${m}`, expected_value: 'AllowList or BlockList', evidence: { 'Mode': m, 'מצב': m && m !== 'none' ? 'תקין ✓' : 'ללא הגבלת דומיינים ✗' } }; }
+    case 'CIS-7.2.10': { const spo = await getSpoSettings(token); if (!spo) return { status: 'manual', actual_value: 'Cannot access SharePoint settings', expected_value: 'Required ≤30d', evidence: {} }; const req = spo.emailAttestationRequired; const d = spo.emailAttestationReAuthDays; return { status: req && d && d <= 30 ? 'passed' : req ? 'warning' : 'failed', actual_value: `required: ${req}, days: ${d}`, expected_value: 'true, ≤30d', evidence: { 'Required': req, 'Days': d, 'מצב': req && d <= 30 ? 'תקין ✓' : 'הגדר ✗' } }; }
 
     default:
       return { status: 'manual', actual_value: 'בדיקה דורשת אימות ידני', expected_value: 'ראה הנחיות תיקון', evidence: { 'הערה': 'בדיקה זו דורשת אימות ידני בפורטל הרלוונטי' } };
