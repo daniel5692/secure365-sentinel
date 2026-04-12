@@ -71,11 +71,25 @@ export default function Scans() {
     }, 5000);
   };
 
+  // Poll running scans every 3 seconds
+  useEffect(() => {
+    const hasRunning = scans.some(s => s.status === 'running' || s.status === 'queued');
+    if (!hasRunning) return;
+    const interval = setInterval(async () => {
+      if (!user) return;
+      const updated = await base44.entities.ScanJob.filter({ created_by: user.email }, '-created_date', 50);
+      setScans(updated);
+      if (!updated.some(s => s.status === 'running' || s.status === 'queued')) {
+        clearInterval(interval);
+      }
+    }, 2500);
+    return () => clearInterval(interval);
+  }, [scans, user]);
+
   const handleDeleteScan = async (e, scanId) => {
     e.preventDefault();
     e.stopPropagation();
     if (!confirm('למחוק את הסריקה וכל הממצאים שלה?')) return;
-    // Delete all check results for this scan
     const results = await base44.entities.CheckResult.filter({ scan_job_id: scanId });
     await Promise.all(results.map(r => base44.entities.CheckResult.delete(r.id)));
     await base44.entities.ScanJob.delete(scanId);
@@ -189,8 +203,23 @@ export default function Scans() {
                         {duration != null && <span>{duration} דקות</span>}
                         {scan.total_checks > 0 && <span>{scan.total_checks} בדיקות</span>}
                       </div>
-                      {scan.status === 'running' && (
-                        <Progress value={scan.progress} className="mt-2 h-1.5" />
+                      {(scan.status === 'running' || scan.status === 'queued') && (
+                        <div className="mt-2 space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] text-primary animate-pulse">
+                              {scan.status === 'queued' ? 'ממתין להתחלה...' :
+                               scan.error_message ? scan.error_message :
+                               scan.completed_checks > 0 ? `בודק: ${scan.completed_checks}/${scan.total_checks || '?'}` : 'מאתחל סריקה...'}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">{scan.progress || 0}%</span>
+                          </div>
+                          <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-primary rounded-full transition-all duration-700 ease-out"
+                              style={{ width: `${scan.status === 'queued' ? 2 : (scan.progress || 0)}%` }}
+                            />
+                          </div>
+                        </div>
                       )}
                     </div>
                     <div className="flex items-center gap-4">
