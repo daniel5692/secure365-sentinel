@@ -14,6 +14,8 @@ import './domains/intune';
 import './domains/entraIdExtended';
 import './domains/idProtection';
 import './domains/idGovernance';
+import './domains/exchangeExtended';
+import './domains/sharepointExtended';
 
 // Re-export registry for convenience
 export {
