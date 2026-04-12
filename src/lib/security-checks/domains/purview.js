@@ -10,7 +10,8 @@ registerCheck({
   category: 'Purview / Compliance', domain: 'purview', severity: 'critical',
   benchmarkRef: 'CIS M365 v6.0.1 - 7.1.1', framework: 'cis_m365',
   expectedState: 'Audit log search enabled in Microsoft Purview',
-  remediationHe: 'Microsoft Purview > Audit > Start recording user and admin activity',
+  remediationHe: 'Microsoft Purview portal (purview.microsoft.com) → Solutions → Audit → אם מוצג banner "Start recording user and admin activity" — לחץ עליו. לחלופין: PowerShell: Set-AdminAuditLogConfig -UnifiedAuditLogIngestionEnabled $true. בדוק סטטוס עם: Get-AdminAuditLogConfig | Select UnifiedAuditLogIngestionEnabled.',
+  //
   whyItMattersHe: 'ללא audit log לא ניתן לחקור אירועי אבטחה. זה הנכס הקריטי ביותר לזיהוי פריצות.',
   graphApiEndpoint: '/security/secureScores', requiredPermissions: ['SecurityEvents.Read.All'], isAutomated: true,
 });
@@ -23,7 +24,8 @@ registerCheck({
   category: 'Purview / Compliance', domain: 'purview', severity: 'high',
   benchmarkRef: 'CIS M365 v6.0.1 - 7.2.1', framework: 'cis_m365',
   expectedState: 'At least one active DLP policy covering Exchange, SharePoint, Teams',
-  remediationHe: 'Microsoft Purview > Data loss prevention > Policies > Create policy — בחר תבנית רלוונטית',
+  remediationHe: 'Microsoft Purview portal (purview.microsoft.com) → Solutions → Data loss prevention → Policies → Create policy → בחר תבנית (לדוג׳ "Financial data" או "Israel Personal Data") → Apply to: Exchange Email, SharePoint, OneDrive, Teams → Mode: Turn it on → Save.',
+  //
   whyItMattersHe: 'ללא DLP, עובדים יכולים לשלוח בטעות (או בכוונה) מידע רגיש מחוץ לארגון.',
   graphApiEndpoint: null, requiredPermissions: [], isAutomated: false,
 });
@@ -36,7 +38,8 @@ registerCheck({
   category: 'Purview / Compliance', domain: 'purview', severity: 'medium',
   benchmarkRef: 'CIS M365 v6.0.1 - 7.3.1', framework: 'cis_m365',
   expectedState: 'Sensitivity labels created and published to users',
-  remediationHe: 'Microsoft Purview > Information protection > Labels > Create labels > Publish labels to users',
+  remediationHe: 'Microsoft Purview portal (purview.microsoft.com) → Solutions → Information protection → Labels → Create a label → הגדר name ו-color → Scope: Files & emails → Encryption: Optional → Create. לאחר מכן: Labels → Publish labels → בחר את התוויות → Apply to all users → Policy name → Publish.',
+  //
   whyItMattersHe: 'בלי סיווג, עובדים לא יודעים אילו מסמכים הם רגישים. תוויות מאפשרות הגנה אוטומטית ועקבית.',
   graphApiEndpoint: null, requiredPermissions: [], isAutomated: false,
 });

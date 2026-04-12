@@ -32,11 +32,24 @@ function EvidenceCard({ evidence }) {
     <div className="space-y-2">
       {entries.map(([key, value]) => {
         let strVal = String(value);
-        // Strip HTML tags from evidence values
         if (strVal.includes('<')) strVal = stripHtml(strVal);
         strVal = formatScore(strVal);
         const isGood = strVal.includes('✓');
         const isBad = strVal.includes('✗');
+        return (
+          <div key={key} className={cn(
+            "flex items-start justify-between gap-3 p-2.5 rounded-lg border text-xs",
+            isGood ? "bg-green-500/5 border-green-500/20" :
+            isBad ? "bg-red-500/5 border-red-500/20" :
+            "bg-secondary/30 border-border"
+          )}>
+            <span className="text-muted-foreground font-medium flex-shrink-0 min-w-[120px]">{key}</span>
+            <span className={cn(
+              "font-mono text-right break-all",
+              isGood ? "text-green-400" : isBad ? "text-red-400" : "text-foreground"
+            )} dir="ltr">{strVal}</span>
+          </div>
+        );
       })}
     </div>
   );

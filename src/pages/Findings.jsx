@@ -9,7 +9,7 @@ import FindingDetail from "@/components/findings/FindingDetail";
 import { base44 } from "@/api/base44Client";
 import { getAllChecks } from "@/lib/security-checks";
 
-const CHECK_TITLE_MAP = Object.fromEntries(getAllChecks().map(c => [c.id, { en: c.title, he: c.titleHe }]));
+const CHECK_TITLE_MAP = Object.fromEntries(getAllChecks().map(c => [c.id, { en: c.title }]));
 
 export default function Findings() {
   const [results, setResults] = useState([]);
@@ -144,9 +144,6 @@ export default function Findings() {
                   </div>
                   <div className="col-span-4">
                     <div className="text-xs font-medium text-foreground">{CHECK_TITLE_MAP[result.check_id]?.en || result.check_title}</div>
-                    {CHECK_TITLE_MAP[result.check_id]?.he && (
-                      <div className="text-[10px] text-muted-foreground mt-0.5">{CHECK_TITLE_MAP[result.check_id].he}</div>
-                    )}
                   </div>
                   <div className="col-span-2">
                     <span className="text-xs text-muted-foreground">{DOMAIN_META[result.domain]?.labelHe || result.domain || '—'}</span>

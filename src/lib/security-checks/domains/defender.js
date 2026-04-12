@@ -10,7 +10,8 @@ registerCheck({
   category: 'Defender for Office 365', domain: 'defender', severity: 'high',
   benchmarkRef: 'CIS M365 v6.0.1 - 4.1.1', framework: 'cis_m365',
   expectedState: 'Safe Attachments policy enabled covering all users',
-  remediationHe: 'Microsoft Defender > Email & collaboration > Policies > Safe attachments > הפעל מדיניות לכל הדומיינים',
+  remediationHe: 'Microsoft Defender portal (security.microsoft.com) → Email & collaboration → Policies & rules → Threat policies → Safe Attachments → Create policy (או ערוך קיימת) → Apply to: כל הדומיינים שלך → Action: Block → Enable redirect on detection → Save.',
+  //
   whyItMattersHe: 'רוב ה-ransomware מועבר כקובץ מצורף. Safe Attachments חוסם מתקפות zero-day לפני שהן מגיעות למשתמש.',
   graphApiEndpoint: '/security/secureScores', requiredPermissions: ['SecurityEvents.Read.All'], isAutomated: true,
 });
@@ -23,7 +24,8 @@ registerCheck({
   category: 'Defender for Office 365', domain: 'defender', severity: 'high',
   benchmarkRef: 'CIS M365 v6.0.1 - 4.1.2', framework: 'cis_m365',
   expectedState: 'Safe Links policy enabled for email and Office apps',
-  remediationHe: 'Microsoft Defender > Email & collaboration > Policies > Safe links > הפעל עם "Do not allow users to click through"',
+  remediationHe: 'Microsoft Defender portal (security.microsoft.com) → Email & collaboration → Policies & rules → Threat policies → Safe Links → Create policy → Apply to כל הדומיינים → בקטע URL & click settings: כבה "Do not rewrite URLs" → כבה "Allow users to click through to original URL" → Save.',
+  //
   whyItMattersHe: 'קישורי פישינג משתנים לאחר מסירת הדואר. Safe Links בודקת URL בזמן לחיצה, לא רק בזמן קבלה.',
   graphApiEndpoint: '/security/secureScores', requiredPermissions: ['SecurityEvents.Read.All'], isAutomated: true,
 });
@@ -36,7 +38,8 @@ registerCheck({
   category: 'Defender for Office 365', domain: 'defender', severity: 'critical',
   benchmarkRef: 'CIS M365 v6.0.1 - 4.2.1', framework: 'cis_m365',
   expectedState: 'Anti-phishing policy with user and domain impersonation protection enabled',
-  remediationHe: 'Microsoft Defender > Policies > Anti-phishing > הגדר הגנת התחזות לדומיינים ובכירים בארגון',
+  remediationHe: 'Microsoft Defender portal (security.microsoft.com) → Email & collaboration → Policies & rules → Threat policies → Anti-phishing → ערוך "Office365 AntiPhish Default" → Phishing threshold: 2 (Aggressive) → Impersonation: הפעל "Enable users to protect" ו-"Enable domains to protect" → הוסף executive usernames → Save.',
+  //
   whyItMattersHe: 'BEC מסתמך על התחזות לכתובות של מנהלים. הגנת impersonation מזהה ניסיונות אלו.',
   graphApiEndpoint: '/security/secureScores', requiredPermissions: ['SecurityEvents.Read.All'], isAutomated: true,
 });
@@ -49,7 +52,8 @@ registerCheck({
   category: 'Secure Score', domain: 'defender', severity: 'high',
   benchmarkRef: 'CIS M365 v6.0.1 - 4.3.1', framework: 'cis_m365',
   expectedState: 'Secure Score ≥ 60%',
-  remediationHe: 'Microsoft Defender > Secure score > Recommended actions — יישם את ההמלצות בסדר עדיפות',
+  remediationHe: 'Microsoft Defender portal (security.microsoft.com) → Secure score → Improvement actions → סנן לפי Score impact (גבוה לנמוך) → יישם את ההמלצות בסדר עדיפות. התמקד בבדיקות עם Score impact גבוה כמו MFA, Legacy Auth, Safe Attachments.',
+  //
   whyItMattersHe: 'Secure Score מרכז את כל ההמלצות. ציון נמוך מ-60% מצביע על פערים בסיסיים.',
   graphApiEndpoint: '/security/secureScores', requiredPermissions: ['SecurityEvents.Read.All'], isAutomated: true,
 });
@@ -62,7 +66,8 @@ registerCheck({
   category: 'Defender for Office 365', domain: 'defender', severity: 'medium',
   benchmarkRef: 'CIS M365 v6.0.1 - 4.4.1', framework: 'cis_m365',
   expectedState: 'Customer Lockbox enabled',
-  remediationHe: 'Microsoft 365 Admin Center > Settings > Org settings > Security & privacy > Customer Lockbox = On',
+  remediationHe: 'Microsoft 365 Admin Center (admin.microsoft.com) → Settings → Org settings → לחץ טאב "Security & privacy" → Customer Lockbox → סמן "Require approval for all Microsoft support requests for data in this tenant" → Save. דורש רישיון Microsoft 365 E5 / Office 365 E5 / Customer Lockbox add-on.',
+  //
   whyItMattersHe: 'Customer Lockbox מבטיח שגישת Microsoft לנתוניך היא רק באישורך ולצורך פתרון בעיות מתועד.',
   graphApiEndpoint: null, requiredPermissions: [], isAutomated: false,
 });

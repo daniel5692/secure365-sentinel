@@ -10,7 +10,8 @@ registerCheck({
   category: 'Microsoft Teams', domain: 'teams', severity: 'high',
   benchmarkRef: 'CIS M365 v6.0.1 - 6.1.1', framework: 'cis_m365',
   expectedState: 'External access restricted to specific allowed domains',
-  remediationHe: 'Teams Admin Center > Users > External access > Allow only specific external domains',
+  remediationHe: 'Teams Admin Center (admin.teams.microsoft.com) → Users → External access → בחר "Allow only specific external domains" → הוסף את הדומיינים המורשים. לחלופין (מ-2026): Teams Admin Center → External collaboration → Custom mode → Who gets access → configure allowed domains.',
+  //
   whyItMattersHe: 'External access פתוח מאפשר phishing ישירות דרך Teams מכל ארגון בעולם.',
   graphApiEndpoint: null, requiredPermissions: [], isAutomated: false,
 });
@@ -23,7 +24,8 @@ registerCheck({
   category: 'Microsoft Teams', domain: 'teams', severity: 'medium',
   benchmarkRef: 'CIS M365 v6.0.1 - 6.1.2', framework: 'cis_m365',
   expectedState: 'Guest access with limited permissions (no private calling, no presence)',
-  remediationHe: 'Teams Admin Center > Users > Guest access > השבת Make private calls, Allow IP video, וכו\'',
+  remediationHe: 'Teams Admin Center (admin.teams.microsoft.com) → Users → Guest access → תחת Calling: כבה "Make private calls" → תחת Meeting: כבה "Allow IP video" ו-"Allow Meet Now" → תחת Messaging: כבה "Delete sent messages" לפי הצורך. שמור שינויים.',
+  //
   whyItMattersHe: 'אורח עם הרשאות רחבות יכול לקיים שיחות לא מנוטרות עם עובדים ולגשת לתוכן רגיש.',
   graphApiEndpoint: null, requiredPermissions: [], isAutomated: false,
 });
@@ -36,7 +38,8 @@ registerCheck({
   category: 'Microsoft Teams', domain: 'teams', severity: 'high',
   benchmarkRef: 'CIS M365 v6.0.1 - 6.2.1', framework: 'cis_m365',
   expectedState: 'Allow anonymous users to start a meeting = Off',
-  remediationHe: 'Teams Admin Center > Meetings > Meeting policies > Allow anonymous users to start a meeting = Off',
+  remediationHe: 'Teams Admin Center (admin.teams.microsoft.com) → Meetings → Meeting policies → Global (Org-wide default) → גלול ל-Participants & guests → כבה את "Anonymous users can start a meeting" → Save.',
+  //
   whyItMattersHe: 'ללא הגבלה זו, אנשים חיצוניים יכולים "לחטוף" פגישות ריקות ולחכות לניצול.',
   graphApiEndpoint: null, requiredPermissions: [], isAutomated: false,
 });
@@ -49,7 +52,8 @@ registerCheck({
   category: 'Microsoft Teams', domain: 'teams', severity: 'low',
   benchmarkRef: 'CIS M365 v6.0.1 - 6.3.1', framework: 'cis_m365',
   expectedState: 'Meeting recording storage = OneDrive (default in current Teams)',
-  remediationHe: 'בגרסאות Teams מודרניות הקלטות עוברות ל-OneDrive אוטומטית; ודא שאין override',
+  remediationHe: 'Teams Admin Center (admin.teams.microsoft.com) → Meetings → Meeting policies → Global → ודא שאין policy שמשבית OneDrive/SharePoint כיעד הקלטה. ב-Microsoft 365 Admin Center: Settings → Org settings → Microsoft Teams → ודא ש-"Allow recording" מופעל. הקלטות עוברות ל-OneDrive של המארח אוטומטית בגרסאות Teams מודרניות.',
+  //
   whyItMattersHe: 'הקלטות מכילות לעתים מידע רגיש. אחסון ב-OneDrive/SharePoint מאפשר DLP ו-retention policies.',
   graphApiEndpoint: null, requiredPermissions: [], isAutomated: false,
 });

@@ -10,7 +10,8 @@ registerCheck({
   category: 'Entra ID', domain: 'entra_id', severity: 'high',
   benchmarkRef: 'CIS M365 v6.0.1 - 1.1.1', framework: 'cis_m365',
   expectedState: 'Security Defaults = Disabled',
-  remediationHe: 'Entra Admin Center > Identity > Overview > Properties > Manage security defaults > Disabled',
+  remediationHe: 'Entra admin center (entra.microsoft.com) → Identity → Overview → Properties (בצד ימין) → לחץ "Manage security defaults" → הגדר ל-Disabled → שמור. חשוב: ודא שיש CA policies פעילות לפני השבתה.',
+  //
   whyItMattersHe: 'Security Defaults לא מאפשר גמישות. עם CA ניתן לשלוט במדויק מי ניגש למה ובאיזה תנאים.',
   graphApiEndpoint: '/policies/identitySecurityDefaultsEnforcementPolicy',
   requiredPermissions: ['Policy.Read.All'], isAutomated: true,
@@ -24,7 +25,8 @@ registerCheck({
   category: 'Entra ID', domain: 'entra_id', severity: 'medium',
   benchmarkRef: 'CIS M365 v6.0.1 - 1.1.2', framework: 'cis_m365',
   expectedState: 'Password Hash Sync = Enabled',
-  remediationHe: 'הפעל Password Hash Sync ב-Azure AD Connect / Entra Connect Sync',
+  remediationHe: 'על שרת ה-Azure AD Connect / Entra Connect Sync: פתח את אפליקציית Microsoft Entra Connect → Configure → Customize synchronization options → סמן "Password hash synchronization" → Next → Configure. אמת ב-Entra admin center: Health → Azure AD Connect → Password Hash Sync = Enabled.',
+  //
   whyItMattersHe: 'בלי PHS, Entra ID Protection לא יכולה לזהות סיסמאות שדלפו ב-breached credentials.',
   graphApiEndpoint: '/organization', requiredPermissions: ['Directory.Read.All'], isAutomated: false,
 });
@@ -37,7 +39,8 @@ registerCheck({
   category: 'Entra ID', domain: 'entra_id', severity: 'critical',
   benchmarkRef: 'CIS M365 v6.0.1 - 1.2.1', framework: 'cis_m365',
   expectedState: 'CA policy requiring MFA for all directory roles',
-  remediationHe: 'צור מדיניות CA: Users = Directory roles (all admin roles), Grant = Require MFA',
+  remediationHe: 'Entra admin center (entra.microsoft.com) → Protection → Conditional Access → Policies → New policy → Name: "MFA for Admins" → Users: Directory roles → בחר כל תפקידי admin → Cloud apps: All → Grant: Require multifactor authentication → State: On → Create.',
+  //
   whyItMattersHe: 'חשבון מנהל שנפרץ ללא MFA מאפשר השתלטות מלאה על הסביבה.',
   graphApiEndpoint: '/identity/conditionalAccess/policies', requiredPermissions: ['Policy.Read.All'], isAutomated: true,
 });
@@ -50,7 +53,8 @@ registerCheck({
   category: 'Entra ID', domain: 'entra_id', severity: 'critical',
   benchmarkRef: 'CIS M365 v6.0.1 - 1.2.2', framework: 'cis_m365',
   expectedState: 'CA policy requiring MFA for All users on All cloud apps',
-  remediationHe: 'צור מדיניות CA: Users = All users, Cloud apps = All, Grant = Require MFA',
+  remediationHe: 'Entra admin center (entra.microsoft.com) → Protection → Conditional Access → Policies → New policy → Name: "MFA for All Users" → Users: All users (הוסף exclusion לחשבון break-glass) → Cloud apps: All cloud apps → Grant: Require multifactor authentication → State: On → Create.',
+  //
   whyItMattersHe: 'MFA חוסם 99.9% מהתקפות credential stuffing ו-password spray.',
   graphApiEndpoint: '/identity/conditionalAccess/policies', requiredPermissions: ['Policy.Read.All'], isAutomated: true,
 });
@@ -63,7 +67,8 @@ registerCheck({
   category: 'Entra ID', domain: 'entra_id', severity: 'medium',
   benchmarkRef: 'CIS M365 v6.0.1 - 1.3.1', framework: 'cis_m365',
   expectedState: 'Password never expires for cloud-only accounts',
-  remediationHe: 'Microsoft 365 Admin Center > Settings > Org settings > Security & privacy > Password expiration policy > Never expire',
+  remediationHe: 'Microsoft 365 Admin Center (admin.microsoft.com) → Settings → Org settings → Security & privacy → Password expiration policy → סמן "Set passwords to never expire" → Save. לחלופין PowerShell: Set-MsolPasswordPolicy -ValidityPeriod 2147483647 -DomainName [domain].',
+  //
   whyItMattersHe: 'לחץ לשינוי סיסמה גורם למשתמשים לבחור סיסמאות חלשות וצפויות. MFA מפצה על כך.',
   graphApiEndpoint: '/domains', requiredPermissions: ['Directory.Read.All'], isAutomated: false,
 });
@@ -76,7 +81,8 @@ registerCheck({
   category: 'Entra ID', domain: 'entra_id', severity: 'medium',
   benchmarkRef: 'CIS M365 v6.0.1 - 1.3.3', framework: 'cis_m365',
   expectedState: 'SSPR enabled for All users, 2 methods required',
-  remediationHe: 'Entra > Protection > Password reset > Properties = All, Authentication methods = 2',
+  remediationHe: 'Entra admin center (entra.microsoft.com) → Protection → Password reset → Properties → Self service password reset: All → Save. לאחר מכן: Authentication methods → Number of methods required to reset: 2 → בחר שיטות (Mobile app code, Email, Phone) → Save.',
+  //
   whyItMattersHe: 'דרישת שיטה אחת בלבד לאיפוס סיסמה חושפת לתקיפת account takeover דרך מספר טלפון גנוב.',
   graphApiEndpoint: '/policies/authenticationMethodsPolicy', requiredPermissions: ['Policy.Read.All'], isAutomated: false,
 });
@@ -89,7 +95,8 @@ registerCheck({
   category: 'Entra ID', domain: 'entra_id', severity: 'critical',
   benchmarkRef: 'CIS M365 v6.0.1 - 1.4.1', framework: 'cis_m365',
   expectedState: '2 to 4 Global Administrator accounts',
-  remediationHe: 'Entra > Roles & admins > Global Administrator — סקור ועדכן את הרשימה',
+  remediationHe: 'Entra admin center (entra.microsoft.com) → Identity → Roles & admins → All roles → חפש "Global Administrator" → לחץ על התפקיד → Assignments → סקור את הרשימה. הסר משתמשים לא נחוצים. אם יש פחות מ-2: Add assignments → בחר משתמש.',
+  //
   whyItMattersHe: 'יותר מ-4 מנהלים מגדיל משטח תקיפה; פחות מ-2 יוצר single point of failure.',
   graphApiEndpoint: '/directoryRoles', requiredPermissions: ['Directory.Read.All', 'RoleManagement.Read.Directory'], isAutomated: true,
 });
@@ -102,7 +109,8 @@ registerCheck({
   category: 'Entra ID', domain: 'entra_id', severity: 'high',
   benchmarkRef: 'CIS M365 v6.0.1 - 1.4.2', framework: 'cis_m365',
   expectedState: 'All admin accounts are cloud-only (onPremisesSyncEnabled = false)',
-  remediationHe: 'צור חשבונות ניהול ייעודיים בענן עם סיומת .onmicrosoft.com; השתמש בחשבונות ה-AD המקומי לעבודה שוטפת בלבד.',
+  remediationHe: 'Entra admin center (entra.microsoft.com) → Identity → Users → New user → צור משתמש חדש עם UPN [name]@[tenant].onmicrosoft.com → הוסף לתפקיד Global Administrator. לאחר מכן הסר מהתפקיד את החשבונות המסונכרנים. כל מנהל יקבל 2 חשבונות: עבודה שוטפת (מסונכרן) + ניהול (ענן).',
+  //
   whyItMattersHe: 'תוקף שפורץ ל-AD המקומי יכול להשתלט על חשבונות מנהל מסונכרנים ומשם על הענן.',
   graphApiEndpoint: '/directoryRoles', requiredPermissions: ['Directory.Read.All'], isAutomated: true,
 });

@@ -10,7 +10,8 @@ registerCheck({
   category: 'Exchange Online', domain: 'exchange_online', severity: 'high',
   benchmarkRef: 'CIS M365 v6.0.1 - 3.1.1', framework: 'cis_m365',
   expectedState: 'OAuth2ClientProfileEnabled = True',
-  remediationHe: 'Connect-ExchangeOnline; Set-OrganizationConfig -OAuth2ClientProfileEnabled $true',
+  remediationHe: 'PowerShell: Install-Module ExchangeOnlineManagement → Connect-ExchangeOnline -UserPrincipalName [admin@domain] → Set-OrganizationConfig -OAuth2ClientProfileEnabled $true → אמת: Get-OrganizationConfig | Select OAuth2ClientProfileEnabled (ציפייה: True).',
+  //
   whyItMattersHe: 'ללא אימות מודרני, לקוחות Outlook ישנים עוקפים MFA ו-Conditional Access.',
   graphApiEndpoint: null, requiredPermissions: [], isAutomated: false,
 });
@@ -23,7 +24,8 @@ registerCheck({
   category: 'Exchange Online', domain: 'exchange_online', severity: 'critical',
   benchmarkRef: 'CIS M365 v6.0.1 - 3.2.1', framework: 'cis_m365',
   expectedState: 'AutoForwardEnabled = False on all Remote Domains',
-  remediationHe: 'Exchange Admin Center > Mail flow > Remote domains > Default > Allow automatic forwarding = Off',
+  remediationHe: 'Exchange Admin Center (admin.exchange.microsoft.com) → Mail flow → Remote domains → לחץ על "Default" → Edit → Automatic forwarding → בחר "Off" (Blocking) → Save. בדוק גם: Mail flow → Rules — ודא שאין Transport Rule שמאפשר forward חיצוני.',
+  //
   whyItMattersHe: 'BEC (Business Email Compromise) תוקפים מגדירים auto-forward לאיסוף שקט של כל הדואר העסקי.',
   graphApiEndpoint: null, requiredPermissions: [], isAutomated: false,
 });
@@ -36,7 +38,8 @@ registerCheck({
   category: 'Mail Flow', domain: 'mail_flow', severity: 'high',
   benchmarkRef: 'CIS M365 v6.0.1 - 3.3.1', framework: 'cis_m365',
   expectedState: 'TXT record: v=spf1 include:spf.protection.outlook.com -all',
-  remediationHe: 'הוסף רשומת TXT ב-DNS: v=spf1 include:spf.protection.outlook.com -all',
+  remediationHe: 'ב-DNS provider שלך (למשל Cloudflare, GoDaddy, Route53) → הוסף/ערוך רשומת TXT לדומיין הראשי: Name: @ | Type: TXT | Value: v=spf1 include:spf.protection.outlook.com -all → המתן 24-48 שעות לרענון DNS. אמת ב: https://mxtoolbox.com/spf.aspx',
+  //
   whyItMattersHe: 'ללא SPF, כל אחד יכול לשלוח דואר שנראה כאילו הגיע מהדומיין שלך לצורך פישינג.',
   graphApiEndpoint: '/domains', requiredPermissions: ['Directory.Read.All'], isAutomated: false,
 });
@@ -49,7 +52,8 @@ registerCheck({
   category: 'Mail Flow', domain: 'mail_flow', severity: 'high',
   benchmarkRef: 'CIS M365 v6.0.1 - 3.3.2', framework: 'cis_m365',
   expectedState: 'DKIM enabled and publishing CNAME records for all custom domains',
-  remediationHe: 'Exchange Admin Center > Email authentication > DKIM > Enable for each domain',
+  remediationHe: 'Exchange Admin Center (admin.exchange.microsoft.com) → Settings → Email authentication → DKIM → בחר דומיין → Enable. DKIM ייצור אוטומטית CNAME records שיש להוסיף ב-DNS: selector1._domainkey → [selector1CNAME] ו-selector2._domainkey → [selector2CNAME]. לאחר הוספה ב-DNS המתן שעה ואז Enable שוב.',
+  //
   whyItMattersHe: 'DKIM מונע "email tampering" — שינוי תוכן הדואר בזמן המעבר.',
   graphApiEndpoint: '/domains', requiredPermissions: ['Directory.Read.All'], isAutomated: false,
 });
@@ -62,7 +66,8 @@ registerCheck({
   category: 'Mail Flow', domain: 'mail_flow', severity: 'high',
   benchmarkRef: 'CIS M365 v6.0.1 - 3.3.3', framework: 'cis_m365',
   expectedState: 'DMARC TXT record: p=reject or p=quarantine with rua reporting',
-  remediationHe: 'הוסף רשומת TXT: _dmarc.yourdomain.com → v=DMARC1; p=quarantine; rua=mailto:dmarc@yourdomain.com',
+  remediationHe: 'ב-DNS provider: הוסף רשומת TXT: Name: _dmarc | Value: v=DMARC1; p=quarantine; rua=mailto:dmarc-reports@[domain]; pct=100 → המתן 24-48 שעות. לאחר מעקב על דוחות והבטחת תקינות SPF/DKIM, שנה ל-p=reject. אמת ב: https://mxtoolbox.com/dmarc.aspx',
+  //
   whyItMattersHe: 'SPF ו-DKIM בלי DMARC לא מגינים — DMARC הוא השלב שמחליט על ה-enforcement.',
   graphApiEndpoint: '/domains', requiredPermissions: ['Directory.Read.All'], isAutomated: false,
 });
@@ -75,7 +80,8 @@ registerCheck({
   category: 'Exchange Online', domain: 'exchange_online', severity: 'high',
   benchmarkRef: 'CIS M365 v6.0.1 - 3.4.1', framework: 'cis_m365',
   expectedState: 'AuditDisabled = False (organization-wide mailbox audit enabled)',
-  remediationHe: 'Connect-ExchangeOnline; Set-OrganizationConfig -AuditDisabled $false',
+  remediationHe: 'PowerShell: Connect-ExchangeOnline -UserPrincipalName [admin@domain] → Set-OrganizationConfig -AuditDisabled $false → אמת: Get-OrganizationConfig | Select AuditDisabled (ציפייה: False). הגדרת ברירת מחדל ב-M365 היא מופעלת; השבתה ידנית היא סיכון. בדוק גם: Exchange Admin Center → Settings → Mailbox → Auditing.',
+  //
   whyItMattersHe: 'ללא audit log של תיבות דואר, חקירת דליפת מידע דרך דואר בלתי אפשרית.',
   graphApiEndpoint: null, requiredPermissions: [], isAutomated: false,
 });

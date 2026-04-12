@@ -10,7 +10,8 @@ registerCheck({
   category: 'Conditional Access', domain: 'conditional_access', severity: 'high',
   benchmarkRef: 'CIS M365 v6.0.1 - 2.1.1', framework: 'cis_m365',
   expectedState: 'At least one enabled CA policy with Cloud apps = All',
-  remediationHe: 'CA > ודא שמדיניות קיימת עם Cloud apps or actions = All cloud apps',
+  remediationHe: 'Entra admin center (entra.microsoft.com) → Protection → Conditional Access → Policies → בדוק שקיימת policy עם Cloud apps or actions = All cloud apps (לא רק אפליקציות ספציפיות). אם לא קיים — New policy → Cloud apps: All → Grant: Require MFA → On.',
+  //
   whyItMattersHe: 'מדיניות שמכסה רק אפליקציות מסוימות מאפשרת לתוקף לגשת לאפליקציות אחרות ללא הגבלה.',
   graphApiEndpoint: '/identity/conditionalAccess/policies', requiredPermissions: ['Policy.Read.All'], isAutomated: true,
 });
@@ -23,7 +24,8 @@ registerCheck({
   category: 'Conditional Access', domain: 'conditional_access', severity: 'high',
   benchmarkRef: 'CIS M365 v6.0.1 - 2.1.2', framework: 'cis_m365',
   expectedState: 'CA policy requiring Compliant device for cloud apps access',
-  remediationHe: 'CA > New policy > Grant: Require device to be marked as compliant',
+  remediationHe: 'Entra admin center (entra.microsoft.com) → Protection → Conditional Access → New policy → Users: All users → Cloud apps: All → Grant: "Require device to be marked as compliant" OR "Require Hybrid Azure AD joined device" → State: On. דורש Intune enrollment מוגדר.',
+  //
   whyItMattersHe: 'התקן לא מנוהל שנגנב מאפשר גישה לנתונים ארגוניים. Compliant device מחייב הצפנה, PIN, עדכונים.',
   graphApiEndpoint: '/identity/conditionalAccess/policies', requiredPermissions: ['Policy.Read.All'], isAutomated: true,
 });
@@ -36,7 +38,8 @@ registerCheck({
   category: 'Conditional Access', domain: 'conditional_access', severity: 'medium',
   benchmarkRef: 'CIS M365 v6.0.1 - 2.1.3', framework: 'cis_m365',
   expectedState: 'CA policy with sign-in frequency (e.g., 1 hour for admins, 8 hours for users)',
-  remediationHe: 'CA > Session > Sign-in frequency — הגדר תדירות מתאימה לכל קבוצת משתמשים',
+  remediationHe: 'Entra admin center (entra.microsoft.com) → Protection → Conditional Access → New policy → Users: All users → Cloud apps: All → Session: Sign-in frequency → Every 8 hours (משתמשים רגילים) ו-1 hour למנהלים. Persistent browser session: Never persistent → On.',
+  //
   whyItMattersHe: 'סשן שנפרץ בגניבת Token נשאר בתוקף ללא הגבלה ללא בקרות session.',
   graphApiEndpoint: '/identity/conditionalAccess/policies', requiredPermissions: ['Policy.Read.All'], isAutomated: true,
 });
