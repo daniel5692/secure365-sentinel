@@ -27,7 +27,7 @@ export default function Tenants() {
 
   const loadTenants = async () => {
     setLoading(true);
-    const data = await base44.entities.ConnectedTenant.list('-created_date');
+    const data = user ? await base44.entities.ConnectedTenant.filter({ created_by: user.email }, '-created_date') : [];
     setTenants(data);
     setLoading(false);
   };

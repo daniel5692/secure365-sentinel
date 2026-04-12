@@ -46,17 +46,18 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
+    if (!user) return;
     Promise.all([
-      base44.entities.ConnectedTenant.list(),
-      base44.entities.ScanJob.list('-created_date', 10),
-      base44.entities.CheckResult.list('-created_date', 100),
+      base44.entities.ConnectedTenant.filter({ created_by: user.email }),
+      base44.entities.ScanJob.filter({ created_by: user.email }, '-created_date', 10),
+      base44.entities.CheckResult.filter({ created_by: user.email }, '-created_date', 100),
     ]).then(([t, s, r]) => {
       setTenants(t);
       setScans(s);
       setResults(r);
       setLoading(false);
     });
-  }, []);
+  }, [user]);
 
   const latestScan = scans[0];
   const failedResults = results.filter(r => r.status === 'failed');

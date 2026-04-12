@@ -24,13 +24,13 @@ export default function Reports() {
   const [viewReport, setViewReport] = useState(null);
 
   const load = async () => {
+    const user = await base44.auth.me();
     const [r, s] = await Promise.all([
-      base44.entities.Report.list('-created_date', 20),
-      base44.entities.ScanJob.list('-created_date', 50),
+      base44.entities.Report.filter({ created_by: user.email }, '-created_date', 20),
+      base44.entities.ScanJob.filter({ created_by: user.email }, '-created_date', 50),
     ]);
     const completedScans = s.filter(sc => sc.status === 'completed');
     setScans(completedScans);
-    // Only show reports for scans that still exist
     const validScanIds = new Set(completedScans.map(sc => sc.id));
     setReports(r.filter(rp => validScanIds.has(rp.scan_job_id)));
     if (completedScans.length > 0) setSelectedScan(completedScans[0].id);

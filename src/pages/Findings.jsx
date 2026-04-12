@@ -24,15 +24,17 @@ export default function Findings() {
   const [selectedScan, setSelectedScan] = useState(urlScanId || 'all');
 
   useEffect(() => {
+    base44.auth.me().then(user => {
     Promise.all([
-      base44.entities.CheckResult.list('-created_date', 500),
-      base44.entities.ScanJob.list('-created_date', 50),
+      base44.entities.CheckResult.filter({ created_by: user.email }, '-created_date', 500),
+      base44.entities.ScanJob.filter({ created_by: user.email }, '-created_date', 50),
     ]).then(([r, s]) => {
       const completedScans = s.filter(sc => sc.status === 'completed');
       const validScanIds = new Set(completedScans.map(sc => sc.id));
       setResults(r.filter(res => validScanIds.has(res.scan_job_id)));
       setScans(completedScans);
       setLoading(false);
+    });
     });
   }, []);
 

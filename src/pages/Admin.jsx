@@ -28,12 +28,13 @@ export default function Admin() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    base44.auth.me().then(user => {
     Promise.all([
-      base44.entities.ConnectedTenant.list('-created_date', 50),
-      base44.entities.ScanJob.list('-created_date', 100),
-      base44.entities.Report.list('-created_date', 50),
-      base44.entities.AuditLog.list('-created_date', 30),
-      base44.entities.Workspace.list('-created_date', 50),
+      base44.entities.ConnectedTenant.filter({ created_by: user.email }, '-created_date', 50),
+      base44.entities.ScanJob.filter({ created_by: user.email }, '-created_date', 100),
+      base44.entities.Report.filter({ created_by: user.email }, '-created_date', 50),
+      base44.entities.AuditLog.filter({ created_by: user.email }, '-created_date', 30),
+      base44.entities.Workspace.filter({ created_by: user.email }, '-created_date', 50),
     ]).then(([t, s, r, a, w]) => {
       setTenants(t);
       setWorkspaces(w);
@@ -49,6 +50,7 @@ export default function Admin() {
         completedScans: s.filter(sc => sc.status === 'completed').length,
       });
       setLoading(false);
+    });
     });
   }, []);
 

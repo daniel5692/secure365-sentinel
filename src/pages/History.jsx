@@ -10,9 +10,11 @@ export default function History() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    base44.entities.ScanJob.list('-created_date', 50).then(s => {
-      setScans(s.filter(sc => sc.status === 'completed'));
-      setLoading(false);
+    base44.auth.me().then(user => {
+      base44.entities.ScanJob.filter({ created_by: user.email }, '-created_date', 50).then(s => {
+        setScans(s.filter(sc => sc.status === 'completed'));
+        setLoading(false);
+      });
     });
   }, []);
 

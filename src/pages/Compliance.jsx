@@ -13,16 +13,18 @@ export default function Compliance() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    base44.auth.me().then(user => {
     Promise.all([
-      base44.entities.ScanJob.list('-created_date', 50),
-      base44.entities.CheckResult.list('-created_date', 500),
+      base44.entities.ScanJob.filter({ created_by: user.email }, '-created_date', 50),
+      base44.entities.CheckResult.filter({ created_by: user.email }, '-created_date', 500),
     ]).then(([s, r]) => {
       const completedScans = s.filter(sc => sc.status === 'completed');
       setScans(completedScans);
-      // Only keep results that belong to existing scans
       const validScanIds = new Set(completedScans.map(sc => sc.id));
       setResults(r.filter(res => validScanIds.has(res.scan_job_id)));
+      if (completedScans.length > 0) setSelectedScan(completedScans[0].id);
       setLoading(false);
+    });
     });
   }, []);
 

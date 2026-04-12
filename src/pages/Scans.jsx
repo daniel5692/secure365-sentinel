@@ -27,16 +27,17 @@ export default function Scans() {
   const [starting, setStarting] = useState(false);
 
   useEffect(() => {
+    if (!user) return;
     Promise.all([
-      base44.entities.ScanJob.list('-created_date', 50),
-      base44.entities.ConnectedTenant.list(),
+      base44.entities.ScanJob.filter({ created_by: user.email }, '-created_date', 50),
+      base44.entities.ConnectedTenant.filter({ created_by: user.email }),
     ]).then(([s, t]) => {
       setScans(s);
       setTenants(t);
       if (t.length > 0) setScanTenant(t[0].id);
       setLoading(false);
     });
-  }, []);
+  }, [user]);
 
   const connectedTenants = tenants.filter(t => t.connection_status === 'connected');
 
