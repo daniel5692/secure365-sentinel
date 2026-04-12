@@ -36,44 +36,53 @@ Deno.serve(async (req) => {
 
   const token = await getAccessToken(customer_tenant_id);
 
-  // Parallel fetch all data
+  // Fetch all in parallel
   const [
-    allUsers,
+    allUsersCount,
     guestUsers,
-    rooms,
-    sharedMailboxes,
+    activeMembers,
+    disabledUsers,     // shared mailboxes + resource mailboxes are disabled accounts with mail
+    rooms,             // /places API for rooms
     enterpriseApps,
     applications,
-    serviceAccounts,
+    orgContacts,
+    deletedUsers,
   ] = await Promise.all([
-    graphGet(token, '/users?$count=true&$top=1&$select=id'),
-    graphGet(token, "/users?$filter=userType eq 'Guest'&$count=true&$top=1&$select=id"),
-    graphGet(token, '/places/microsoft.graph.room?$count=true&$top=999&$select=id,displayName,emailAddress'),
-    graphGet(token, "/users?$filter=startswith(userPrincipalName,'%23') or (assignedLicenses/$count eq 0 and mail ne null and userType eq 'Member')&$count=true&$top=999&$select=id,displayName,userPrincipalName,mail,accountEnabled,assignedLicenses"),
-    graphGet(token, "/servicePrincipals?$filter=tags/any(t:t eq 'WindowsAzureActiveDirectoryIntegratedApp')&$top=999&$select=id,displayName,appId,accountEnabled,createdDateTime,passwordCredentials,keyCredentials,oauth2PermissionScopes,appRoles"),
+    graphGet(token, "/users?$count=true&$top=1&$select=id"),
+    graphGet(token, "/users?$filter=userType eq 'Guest'&$count=true&$top=999&$select=id,displayName,userPrincipalName,mail,accountEnabled"),
+    graphGet(token, "/users?$filter=userType eq 'Member' and accountEnabled eq true and assignedLicenses/$count ne 0&$count=true&$top=999&$select=id,displayName,userPrincipalName,mail,accountEnabled,assignedLicenses"),
+    graphGet(token, "/users?$filter=userType eq 'Member' and accountEnabled eq false and mail ne null&$count=true&$top=999&$select=id,displayName,userPrincipalName,mail,accountEnabled,assignedLicenses"),
+    graphGet(token, "/places/microsoft.graph.room?$top=999&$select=id,displayName,emailAddress,building,floorNumber,capacity"),
+    graphGet(token, "/servicePrincipals?$filter=tags/any(t:t eq 'WindowsAzureActiveDirectoryIntegratedApp')&$top=999&$select=id,displayName,appId,accountEnabled,createdDateTime,passwordCredentials,keyCredentials"),
     graphGet(token, '/applications?$top=999&$select=id,displayName,appId,createdDateTime,passwordCredentials,keyCredentials'),
-    graphGet(token, "/users?$filter=userType eq 'Member' and accountEnabled eq true and (startswith(displayName,'svc') or startswith(displayName,'service') or startswith(displayName,'bot') or startswith(displayName,'app') or startswith(displayName,'adm'))&$count=true&$top=999&$select=id,displayName,userPrincipalName,accountEnabled,assignedLicenses&$search=\"displayName:svc\""),
+    graphGet(token, "/contacts?$top=999&$select=id,displayName,emailAddresses,companyName,jobTitle"),
+    graphGet(token, "/directory/deletedItems/microsoft.graph.user?$count=true&$top=999&$select=id,displayName,userPrincipalName,mail,deletedDateTime"),
   ]);
 
-  // Active mailboxes: licensed members
-  const licensedUsers = await graphGet(token, "/users?$filter=assignedLicenses/$count ne 0 and userType eq 'Member' and accountEnabled eq true&$count=true&$top=1&$select=id");
+  // Disabled users: split rooms vs shared mailboxes
+  // Rooms have emailAddress matching their UPN and are resource accounts
+  const roomEmails = new Set((rooms?.value || []).map(r => r.emailAddress?.toLowerCase()));
+  const disabledList = disabledUsers?.value || [];
+  
+  const sharedMailboxes = disabledList.filter(u => !roomEmails.has(u.mail?.toLowerCase()));
+  const resourceRooms = rooms?.value || [];
 
-  // Service principals with expired/active credentials
+  // App credentials analysis
   const now = new Date();
   const appCredentials = (applications?.value || []).map(app => {
     const allCreds = [
       ...(app.passwordCredentials || []).map(c => ({ ...c, type: 'secret' })),
       ...(app.keyCredentials || []).map(c => ({ ...c, type: 'certificate' })),
     ];
-    const status = allCreds.length === 0 ? 'no_credentials'
-      : allCreds.some(c => new Date(c.endDateTime) > now) ? 'active'
-      : 'expired';
-    const soonExpiring = allCreds.filter(c => {
-      const expiry = new Date(c.endDateTime);
-      const daysLeft = (expiry - now) / (1000 * 60 * 60 * 24);
-      return daysLeft > 0 && daysLeft <= 30;
+    const activeCredsList = allCreds.filter(c => new Date(c.endDateTime) > now);
+    const expiredList = allCreds.filter(c => new Date(c.endDateTime) <= now);
+    const soonExpiringList = activeCredsList.filter(c => {
+      const daysLeft = (new Date(c.endDateTime) - now) / (1000 * 60 * 60 * 24);
+      return daysLeft <= 30;
     });
-    const expired = allCreds.filter(c => new Date(c.endDateTime) <= now);
+    const status = allCreds.length === 0 ? 'no_credentials'
+      : activeCredsList.length > 0 ? (soonExpiringList.length > 0 ? 'expiring_soon' : 'active')
+      : 'expired';
     return {
       id: app.id,
       displayName: app.displayName,
@@ -81,12 +90,13 @@ Deno.serve(async (req) => {
       createdDateTime: app.createdDateTime,
       status,
       totalCredentials: allCreds.length,
-      expired: expired.length,
-      soonExpiring: soonExpiring.length,
+      expiredCount: expiredList.length,
+      soonExpiringCount: soonExpiringList.length,
       credentials: allCreds.map(c => ({
         type: c.type,
-        displayName: c.displayName || c.keyId,
+        displayName: c.displayName || c.customKeyIdentifier || c.keyId,
         endDateTime: c.endDateTime,
+        startDateTime: c.startDateTime,
         isExpired: new Date(c.endDateTime) <= now,
         daysLeft: Math.round((new Date(c.endDateTime) - now) / (1000 * 60 * 60 * 24)),
       })),
@@ -95,16 +105,22 @@ Deno.serve(async (req) => {
 
   return Response.json({
     stats: {
-      totalUsers: allUsers?.['@odata.count'] ?? 0,
-      guestUsers: guestUsers?.['@odata.count'] ?? 0,
-      activeMailboxes: licensedUsers?.['@odata.count'] ?? 0,
-      sharedMailboxes: (sharedMailboxes?.value || []).filter(u => u.assignedLicenses?.length === 0).length,
-      meetingRooms: rooms?.['@odata.count'] ?? (rooms?.value?.length ?? 0),
+      totalUsers: allUsersCount?.['@odata.count'] ?? 0,
+      guestUsers: guestUsers?.value?.length ?? 0,
+      activeMailboxes: activeMembers?.value?.length ?? 0,
+      sharedMailboxes: sharedMailboxes.length,
+      meetingRooms: resourceRooms.length,
       enterpriseApps: enterpriseApps?.value?.length ?? 0,
+      contacts: orgContacts?.value?.length ?? 0,
+      deletedUsers: deletedUsers?.value?.length ?? 0,
     },
-    rooms: rooms?.value || [],
+    activeMembers: activeMembers?.value || [],
+    guestUsers: guestUsers?.value || [],
+    sharedMailboxes,
+    rooms: resourceRooms,
     enterpriseApps: enterpriseApps?.value || [],
     appCredentials,
-    sharedMailboxes: (sharedMailboxes?.value || []).filter(u => (u.assignedLicenses || []).length === 0),
+    contacts: orgContacts?.value || [],
+    deletedUsers: deletedUsers?.value || [],
   });
 });
