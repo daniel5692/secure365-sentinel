@@ -75,39 +75,6 @@ async function getSpoSettings(graphToken) {
 
 let _pbiToken = null;
 let _pbiSettingsCache = null;
-let _tcmSnapshotCache = null;
-
-async function getTcmSnapshot(token) {
-  if (_tcmSnapshotCache) return _tcmSnapshotCache;
-  try {
-    const res = await fetch('https://graph.microsoft.com/beta/admin/configurationManagement/configurationSnapshots?$top=1&$orderby=createdDateTime desc', {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const latest = data.value?.[0];
-    if (!latest) return null;
-    _tcmSnapshotCache = latest;
-    return latest;
-  } catch (err) {
-    return null;
-  }
-}
-
-async function getTcmMeetingPolicy(token, snapshotId) {
-  try {
-    const res = await fetch(`https://graph.microsoft.com/beta/admin/configurationManagement/configurationSnapshots('${snapshotId}')?$expand=configurations($filter=templateId%20eq%20'e0de7ff7-fbfe-5143-a917-8dcc8285b648')`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const configs = data.configurations || [];
-    const globalPolicy = configs.find(c => c.settingObjectId === 'Global' || !c.settingObjectId);
-    return globalPolicy?.settings || null;
-  } catch (err) {
-    return null;
-  }
-}
 
 async function getPowerBiToken(tenantId) {
   const res = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
@@ -910,29 +877,24 @@ async function runCheck(token, checkId) {
     }
 
     case 'CIS-6.2.1': {
-      const orgId613 = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
-      const org613 = orgId613 && _exToken ? await exchangeGet(orgId613, 'Organization') : null;
-      const d613 = org613?.value?.[0] || org613;
-      if (d613) return { status: d613.AuditDisabled === false || d613.AuditDisabled === undefined ? 'passed' : 'warning', actual_value: `AuditDisabled: ${d613.AuditDisabled ?? false}`, expected_value: 'No mailboxes with AuditBypass', evidence: { 'AuditDisabled': d613.AuditDisabled ?? false } };
-      return { status: 'manual', actual_value: 'Exchange API not accessible', expected_value: 'No AuditBypass', evidence: { 'הערה': 'PowerShell: Get-MailboxAuditBypassAssociation' } };
-    }
-    case 'CIS-8.1.1': case 'CIS-8.1.2': case 'CIS-8.2.1': case 'CIS-8.2.2': case 'CIS-8.5.1': case 'CIS-8.5.2': case 'CIS-8.5.3': case 'CIS-8.5.9': {
-      const scoreT = await getSecureScoreControls(token);
-      const kwT = { 'CIS-8.1.1': ['TeamsFileSharing','CloudStorage'], 'CIS-8.1.2': ['ChannelEmail','channelemail'], 'CIS-8.2.1': ['TeamsExternal','FederationExternal'], 'CIS-8.2.2': ['UnmanagedTeams','ConsumerTeams'], 'CIS-8.5.1': ['AnonymousJoin','AllowAnonymous'], 'CIS-8.5.2': ['AnonymousStart','AnonymousMeeting'], 'CIS-8.5.3': ['LobbyBypass','AutoAdmit'], 'CIS-8.5.9': ['MeetingRecording','AllowRecording'] };
-      const noteT = { 'CIS-8.1.1': 'Teams Admin → Teams apps → 3rd party cloud storage: Off', 'CIS-8.1.2': 'Teams Admin → Teams settings → Email integration: Off', 'CIS-8.2.1': 'Teams Admin → Users → External access → Specific domains only', 'CIS-8.2.2': 'Teams Admin → Users → External access → Block unmanaged Teams users', 'CIS-8.5.1': 'Teams Admin → Meetings → Meeting policies → Anonymous users cannot join', 'CIS-8.5.2': 'Teams Admin → Meetings → Allow anonymous users to start: Off', 'CIS-8.5.3': 'Teams Admin → Meetings → Who can bypass lobby: People in my org', 'CIS-8.5.9': 'Teams Admin → Meetings → Recording: Off' };
-      const kws = kwT[checkId] || [];
-      let ctrl = null; for (const kw of kws) { ctrl = getControl(scoreT, kw); if (ctrl) break; }
-      if (ctrl) { const impl = ctrl.score > 0; return { status: impl ? 'passed' : 'warning', actual_value: `${ctrl.controlName}: ${ctrl.score}/${ctrl.maxScore}`, expected_value: 'Implemented', evidence: { 'ציון': `${ctrl.score}/${ctrl.maxScore}`, 'מצב': impl ? 'תקין ✓' : 'בדוק ✗' } }; }
-      // Fallback: Try TCM Snapshot API
-      const tcmSnapshot = await getTcmSnapshot(token);
-      if (tcmSnapshot) {
-        const meetingPolicy = await getTcmMeetingPolicy(token, tcmSnapshot.id);
-        if (meetingPolicy) {
-          // Parse TCM policy for Teams settings
-          return { status: 'warning', actual_value: 'TCM Snapshot found, Secure Score not available', expected_value: 'Implemented (via TCM)', evidence: { 'הערה': `TCM Snapshot ID: ${tcmSnapshot.id} — בדוק ידנית בפורטל TCM`, 'Snapshot Date': new Date(tcmSnapshot.createdDateTime).toLocaleDateString('he-IL') } };
-        }
+      const score = await getSecureScoreControls(token);
+      const ctrl = getControl(score, 'Anonymous') || getControl(score, 'AnonymousMeeting') || getControl(score, 'AllowAnonymousUsersToJoinMeeting');
+      if (ctrl) {
+        const implemented = ctrl.score > 0 || ctrl.implementationStatus === 'Implemented';
+        return {
+          status: implemented ? 'passed' : 'failed',
+          actual_value: implemented ? `${ctrl.controlName}: Implemented (score ${ctrl.score}/${ctrl.maxScore})` : `${ctrl.controlName}: Not Implemented`,
+          expected_value: 'AllowAnonymousUsersToJoinMeeting = False',
+          evidence: {
+            'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
+            'סטטוס': ctrl.implementationStatus || 'לא ידוע',
+            'מצב': implemented ? 'תקין ✓' : 'דורש הגדרה ✗',
+          },
+        };
       }
-      return { status: 'manual', actual_value: 'Teams API not accessible via standard Graph', expected_value: 'See Teams Admin Center', evidence: { 'הערה': noteT[checkId] || 'Teams Admin Center' } };
+      return { status: 'manual', actual_value: 'Teams API not accessible via standard Graph', expected_value: 'See Teams Admin Center', evidence: { 'הערה': 'Teams Admin → Meetings → Meeting policies → Anonymous users cannot join' } };
+    }
+    case 'CIS-8.1.1': case 'CIS-8.1.2': case 'CIS-8.2.1': case 'CIS-8.2.2': case 'CIS-8.5.2': case 'CIS-8.5.3': case 'CIS-8.5.9': {
     }
     case 'CIS-8.2.3': case 'CIS-8.2.4': case 'CIS-8.5.4': case 'CIS-8.5.5': case 'CIS-8.5.6': case 'CIS-8.5.7': case 'CIS-8.5.8': case 'CIS-8.6.1': {
       const noteT2 = { 'CIS-8.2.3': 'Teams Admin → External access → External users cannot initiate chats', 'CIS-8.2.4': 'Teams Admin → External access → Block trial tenants', 'CIS-8.5.4': 'Teams Admin → Meetings → Dial-in lobby bypass: Off', 'CIS-8.5.5': 'Teams Admin → Meetings → Chat: Enabled for everyone except anonymous', 'CIS-8.5.6': 'Teams Admin → Meetings → Who can present: Only organizers', 'CIS-8.5.7': 'Teams Admin → Meetings → External participants can give control: Off', 'CIS-8.5.8': 'Teams Admin → Meetings → External users chat in meetings: Off', 'CIS-8.6.1': 'Teams Admin → Messaging policies → Report a security concern: On' };
@@ -1222,7 +1184,6 @@ Deno.serve(async (req) => {
   _spoSettingsCache = null;
   _pbiToken = null;
   _pbiSettingsCache = null;
-  _tcmSnapshotCache = null;
 
   const base44 = createClientFromRequest(req);
   const user = await base44.auth.me();
