@@ -16,6 +16,8 @@ import './domains/idProtection';
 import './domains/idGovernance';
 import './domains/exchangeExtended';
 import './domains/sharepointExtended';
+import './domains/teamsExtended';
+import './domains/fabricTenant';
 
 // Re-export registry for convenience
 export {
