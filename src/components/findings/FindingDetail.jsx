@@ -91,7 +91,10 @@ export default function FindingDetail({ finding }) {
               <SeverityBadge severity={finding.severity} />
               <StatusBadge status={finding.status} />
             </div>
-            <h1 className="text-lg font-bold text-foreground mb-1">{finding.check_title}</h1>
+            <h1 className="text-lg font-bold text-foreground mb-1">{checkDef?.title || finding.check_title}</h1>
+            {checkDef?.titleHe && (
+              <p className="text-sm text-muted-foreground mb-1">{checkDef.titleHe}</p>
+            )}
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span className={cn("px-2 py-0.5 rounded-md border text-[11px]",
                 `bg-${domainMeta?.color || 'blue'}-500/10 border-${domainMeta?.color || 'blue'}-500/30 text-${domainMeta?.color || 'blue'}-400`

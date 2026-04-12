@@ -7,6 +7,9 @@ import SeverityBadge from "@/components/shared/SeverityBadge";
 import StatusBadge from "@/components/shared/StatusBadge";
 import FindingDetail from "@/components/findings/FindingDetail";
 import { base44 } from "@/api/base44Client";
+import { getAllChecks } from "@/lib/security-checks";
+
+const CHECK_TITLE_MAP = Object.fromEntries(getAllChecks().map(c => [c.id, { en: c.title, he: c.titleHe }]));
 
 export default function Findings() {
   const [results, setResults] = useState([]);
@@ -140,9 +143,9 @@ export default function Findings() {
                     <code className="text-[10px] font-mono text-primary">{result.check_id}</code>
                   </div>
                   <div className="col-span-4">
-                    <div className="text-xs font-medium text-foreground">{result.check_title}</div>
-                    {result.explanation_he && (
-                      <div className="text-[10px] text-muted-foreground mt-0.5 truncate">{result.explanation_he}</div>
+                    <div className="text-xs font-medium text-foreground">{CHECK_TITLE_MAP[result.check_id]?.en || result.check_title}</div>
+                    {CHECK_TITLE_MAP[result.check_id]?.he && (
+                      <div className="text-[10px] text-muted-foreground mt-0.5">{CHECK_TITLE_MAP[result.check_id].he}</div>
                     )}
                   </div>
                   <div className="col-span-2">

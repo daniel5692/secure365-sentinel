@@ -87,7 +87,8 @@ async function runCheck(token, checkId) {
       const enabled = data.isEnabled;
       return {
         status: enabled ? 'failed' : 'passed',
-        actual_value: enabled ? 'מופעל' : 'מכובה',
+        actual_value: `isEnabled: ${enabled}`,
+        // actual:
         expected_value: 'מכובה (Disabled)',
         evidence: { 'Security Defaults': enabled ? 'מופעל ✗' : 'מכובה ✓', 'משמעות': enabled ? 'מגביל שימוש ב-Conditional Access' : 'ניתן להגדיר CA מותאם' },
       };
@@ -103,15 +104,17 @@ async function runCheck(token, checkId) {
       if (!isHybrid) {
         return {
           status: 'not_applicable',
-          actual_value: 'סביבת ענן בלבד',
+          actual_value: 'Cloud-only (onPremisesSyncEnabled: false)',
+          //
           expected_value: 'לא רלוונטי לסביבה זו',
           evidence: { 'סוג סביבה': 'Cloud-only', 'סנכרון AD': 'לא מוגדר', 'הערה': 'Password Hash Sync רלוונטי רק לסביבות היברידיות' },
         };
       }
       const syncRecent = lastSync && (new Date() - new Date(lastSync)) < 3 * 60 * 60 * 1000; // within 3h
       return {
-        status: syncRecent ? 'passed' : 'warning',
-        actual_value: lastSync ? `סנכרון אחרון: ${new Date(lastSync).toLocaleString('he-IL')}` : 'לא ידוע',
+      status: syncRecent ? 'passed' : 'warning',
+      actual_value: lastSync ? `Last sync: ${new Date(lastSync).toISOString()}` : 'Unknown',
+      //
         expected_value: 'סנכרון AD פעיל ועדכני',
         evidence: { 'סביבה היברידית': 'כן', 'סנכרון אחרון': lastSync || 'לא ידוע', 'סטטוס סנכרון': syncRecent ? 'תקין ✓' : 'ישן / לא תקין ✗' },
       };
@@ -126,7 +129,8 @@ async function runCheck(token, checkId) {
       );
       return {
         status: mfaAdminPolicies.length > 0 ? 'passed' : 'failed',
-        actual_value: `${mfaAdminPolicies.length} מדיניות CA עם MFA לבעלי הרשאות`,
+        actual_value: `${mfaAdminPolicies.length} CA policies requiring MFA for privileged users`,
+        //
         expected_value: 'לפחות מדיניות CA אחת פעילה המחייבת MFA לתפקידי ניהול',
         evidence: {
           'מדיניות פעילות שנמצאו': mfaAdminPolicies.length,
@@ -147,8 +151,9 @@ async function runCheck(token, checkId) {
       return {
         status: passed ? 'passed' : 'failed',
         actual_value: passed
-          ? `${mfaAllPolicies.length} מדיניות CA עם MFA לכלל המשתמשים`
-          : `אין מדיניות CA עם MFA לכל המשתמשים (קיימות ${anyMfaPolicies.length} מדיניות MFA אחרות)`,
+          ? `${mfaAllPolicies.length} CA policies requiring MFA for All users`
+          : `No CA policy enforcing MFA for All users (${anyMfaPolicies.length} other MFA policies found)`,
+        //
         expected_value: 'לפחות מדיניות CA אחת המחייבת MFA לכל המשתמשים',
         evidence: {
           'מדיניות MFA לכולם (includeUsers=All)': mfaAllPolicies.map(p => p.displayName).join(', ') || 'אין',
@@ -165,7 +170,8 @@ async function runCheck(token, checkId) {
       const expiring = domains.filter(d => d.passwordValidityPeriodInDays !== 2147483647 && d.passwordValidityPeriodInDays !== null);
       return {
         status: expiring.length === 0 ? 'passed' : 'failed',
-        actual_value: expiring.length === 0 ? 'סיסמאות לעולם לא פגות' : `${expiring.length} דומיינים עם סיסמה שפגה`,
+        actual_value: expiring.length === 0 ? 'passwordValidityPeriodInDays: 2147483647 (Never)' : `${expiring.length} domain(s) with password expiration set`,
+        //
         expected_value: 'PasswordValidityPeriodInDays = 2147483647 (לעולם לא פג)',
         evidence: {
           'דומיינים שנבדקו': domains.length,
@@ -183,7 +189,8 @@ async function runCheck(token, checkId) {
       const passed = (state === 'enabled' || state === 'enabledForAllUsers') && methodsCount >= 2;
       return {
         status: passed ? 'passed' : 'failed',
-        actual_value: `SSPR: ${state === 'enabled' || state === 'enabledForAllUsers' ? 'מופעל' : 'מכובה'}, ${methodsCount} שיטות מאומתות`,
+        actual_value: `SSPR state: ${state}, methods enabled: ${methodsCount}`,
+        //
         expected_value: 'SSPR מופעל לכל המשתמשים עם לפחות 2 שיטות אימות',
         evidence: {
           'סטטוס SSPR': state,
@@ -205,7 +212,8 @@ async function runCheck(token, checkId) {
       const status = count >= 2 && count <= 4 ? 'passed' : 'failed';
       return {
         status,
-        actual_value: `${count} מנהלי Global Admin`,
+        actual_value: `${count} Global Administrator(s)`,
+        //
         expected_value: 'בין 2 ל-4 מנהלי Global Admin',
         evidence: {
           'מספר מנהלים': count,
@@ -226,7 +234,8 @@ async function runCheck(token, checkId) {
       const synced = all.filter(u => u.onPremisesSyncEnabled === true);
       return {
         status: synced.length === 0 ? 'passed' : 'failed',
-        actual_value: synced.length === 0 ? 'כל המנהלים הם חשבונות ענן' : `${synced.length} מנהלים מסונכרנים מ-AD`,
+        actual_value: synced.length === 0 ? 'All admin accounts are cloud-only (onPremisesSyncEnabled: false)' : `${synced.length} admin(s) synced from on-premises AD`,
+        //
         expected_value: 'כל חשבונות המנהל הם cloud-only (לא מסונכרנים)',
         evidence: {
           'סך מנהלים': all.length,
@@ -246,7 +255,8 @@ async function runCheck(token, checkId) {
       );
       return {
         status: blockLegacy.length > 0 ? 'passed' : 'failed',
-        actual_value: blockLegacy.length > 0 ? `${blockLegacy.length} מדיניות חוסמות Legacy Auth` : 'אין מדיניות לחסימת Legacy Auth',
+        actual_value: blockLegacy.length > 0 ? `${blockLegacy.length} CA policy(ies) blocking Legacy Auth clients` : 'No CA policy blocking Legacy Authentication',
+        //
         expected_value: 'מדיניות CA פעילה החוסמת ExchangeActiveSync ו-Other clients',
         evidence: {
           'מדיניות חסימה נמצאו': blockLegacy.length,
@@ -265,8 +275,8 @@ async function runCheck(token, checkId) {
       );
       return {
         status: riskPolicy.length > 0 ? 'passed' : 'failed',
-        actual_value: riskPolicy.length > 0 ? `${riskPolicy.length} מדיניות סיכון כניסה` : 'אין מדיניות סיכון כניסה',
-        expected_value: 'מדיניות CA: signInRisk = high/medium → Block או MFA',
+        actual_value: riskPolicy.length > 0 ? `${riskPolicy.length} Sign-in Risk CA policy(ies) found` : 'No Sign-in Risk policy configured',
+        expected_value: 'CA policy: signInRiskLevels = high, medium → Block or MFA',
         evidence: {
           'מדיניות סיכון נמצאו': riskPolicy.length,
           'רשימת מדיניות': riskPolicy.map(p => `${p.displayName} (${p.conditions?.signInRiskLevels?.join(',')})`).join(', ') || 'אין',
@@ -284,8 +294,8 @@ async function runCheck(token, checkId) {
       );
       return {
         status: riskPolicy.length > 0 ? 'passed' : 'failed',
-        actual_value: riskPolicy.length > 0 ? `${riskPolicy.length} מדיניות סיכון משתמש` : 'אין מדיניות סיכון משתמש',
-        expected_value: 'מדיניות CA: userRisk = high/medium → Block או password change',
+        actual_value: riskPolicy.length > 0 ? `${riskPolicy.length} User Risk CA policy(ies) found` : 'No User Risk policy configured',
+        expected_value: 'CA policy: userRiskLevels = high → Block or password change',
         evidence: {
           'מדיניות סיכון משתמש': riskPolicy.length,
           'רשימת מדיניות': riskPolicy.map(p => `${p.displayName} (${p.conditions?.userRiskLevels?.join(',')})`).join(', ') || 'אין',
@@ -306,7 +316,8 @@ async function runCheck(token, checkId) {
       }
       return {
         status: guestAdmins.length === 0 ? 'passed' : 'failed',
-        actual_value: guestAdmins.length === 0 ? 'אין אורחים עם תפקידי מנהל' : `${guestAdmins.length} אורחים עם תפקידי מנהל`,
+        actual_value: guestAdmins.length === 0 ? 'No guest users with directory roles' : `${guestAdmins.length} guest(s) found with admin roles`,
+        //
         expected_value: 'אפס משתמשי אורח עם תפקידי ניהול',
         evidence: {
           'סך אורחים': guests.length,
@@ -327,7 +338,8 @@ async function runCheck(token, checkId) {
       );
       return {
         status: allAppsPolicies.length > 0 ? 'passed' : 'failed',
-        actual_value: `${allAppsPolicies.length} מדיניות מכסות "כל האפליקציות"`,
+        actual_value: `${allAppsPolicies.length} CA policy(ies) with includeApplications: All`,
+        //
         expected_value: 'לפחות מדיניות CA אחת עם Cloud apps = All',
         evidence: {
           'מדיניות "כל האפליקציות"': allAppsPolicies.length,
@@ -347,7 +359,8 @@ async function runCheck(token, checkId) {
       );
       return {
         status: compliantDevice.length > 0 ? 'passed' : 'failed',
-        actual_value: compliantDevice.length > 0 ? `${compliantDevice.length} מדיניות דורשות התקן תואם` : 'אין דרישה להתקן תואם',
+        actual_value: compliantDevice.length > 0 ? `${compliantDevice.length} CA policy(ies) requiring compliantDevice/domainJoined` : 'No compliant device requirement found',
+        //
         expected_value: 'מדיניות CA המחייבת Compliant device או Hybrid Azure AD join',
         evidence: {
           'מדיניות עם דרישת התקן': compliantDevice.length,
@@ -366,7 +379,8 @@ async function runCheck(token, checkId) {
       );
       return {
         status: sessionPolicies.length > 0 ? 'passed' : 'warning',
-        actual_value: `${sessionPolicies.length} מדיניות עם בקרות session`,
+        actual_value: `${sessionPolicies.length} CA policy(ies) with session controls configured`,
+        //
         expected_value: 'לפחות מדיניות CA אחת עם Sign-in frequency מוגדרת',
         evidence: {
           'מדיניות session': sessionPolicies.length,
@@ -389,7 +403,8 @@ async function runCheck(token, checkId) {
         const implemented = ctrl.score > 0 || ctrl.implementationStatus === 'Implemented';
         return {
           status: implemented ? 'passed' : 'failed',
-          actual_value: implemented ? 'אימות מודרני מופעל' : 'אימות מודרני לא מופעל',
+          actual_value: implemented ? `${ctrl.controlName}: Implemented (score ${ctrl.score}/${ctrl.maxScore})` : `${ctrl.controlName}: Not Implemented`,
+          //
           expected_value: 'OAuth2ClientProfileEnabled = True',
           evidence: {
             'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
@@ -415,7 +430,8 @@ async function runCheck(token, checkId) {
         const implemented = ctrl.score > 0 || ctrl.implementationStatus === 'Implemented';
         return {
           status: implemented ? 'passed' : 'failed',
-          actual_value: implemented ? 'העברה אוטומטית חסומה' : 'העברה אוטומטית פעילה',
+          actual_value: implemented ? `${ctrl.controlName}: Implemented (score ${ctrl.score}/${ctrl.maxScore})` : `${ctrl.controlName}: Not Implemented`,
+          //
           expected_value: 'AutoForwardEnabled = False על כל Remote Domains',
           evidence: {
             'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
@@ -449,7 +465,8 @@ async function runCheck(token, checkId) {
       const allHaveSPF = Object.values(results).every(v => v !== 'לא נמצא');
       return {
         status: allHaveSPF ? 'passed' : 'failed',
-        actual_value: allHaveSPF ? 'SPF מוגדר בכל הדומיינים' : 'חסר SPF בחלק מהדומיינים',
+        actual_value: allHaveSPF ? 'SPF configured for all custom domains' : 'SPF missing for one or more domains',
+        //
         expected_value: 'v=spf1 include:spf.protection.outlook.com -all',
         evidence: { ...results, 'מצב': allHaveSPF ? 'תקין ✓' : 'דורש תיקון ✗' },
       };
@@ -487,8 +504,9 @@ async function runCheck(token, checkId) {
       return {
         status: allFull ? 'passed' : anyMissing ? 'failed' : 'warning',
         actual_value: anyMissing
-          ? `DKIM חסר: ${domainsWithoutDkim.join(', ')}${domainsWithDkim.length > 0 ? ` | מוגדר: ${domainsWithDkim.join(', ')}` : ''}`
-          : `DKIM מוגדר בכל הדומיינים (${domainsWithDkim.join(', ')})`,
+          ? `DKIM missing: ${domainsWithoutDkim.join(', ')}${domainsWithDkim.length > 0 ? ` | Configured: ${domainsWithDkim.join(', ')}` : ''}`
+          : `DKIM configured for all domains (${domainsWithDkim.join(', ')})`,
+        //
         expected_value: 'selector1 + selector2 CNAME records לכל דומיין מותאם',
         evidence: { ...evidence, 'מצב': allFull ? 'תקין ✓' : anyMissing ? 'דורש הפעלה ✗' : 'חלקי ⚠' },
       };
@@ -517,7 +535,8 @@ async function runCheck(token, checkId) {
       const allHaveDMARC = Object.values(results).every(v => v !== 'לא נמצא');
       return {
         status: allHaveDMARC && strictCount === customDomains.slice(0, 5).length ? 'passed' : allHaveDMARC ? 'warning' : 'failed',
-        actual_value: allHaveDMARC ? (strictCount > 0 ? `DMARC עם enforcement (${strictCount}/${customDomains.length} דומיינים)` : 'DMARC ללא enforcement') : 'חסר DMARC',
+        actual_value: allHaveDMARC ? (strictCount > 0 ? `DMARC policy=quarantine/reject (${strictCount}/${customDomains.length} domains)` : 'DMARC found but policy=none (no enforcement)') : 'DMARC record missing',
+        //
         expected_value: 'v=DMARC1; p=quarantine או p=reject',
         evidence: { ...results, 'מצב': allHaveDMARC ? (strictCount > 0 ? 'תקין ✓' : 'DMARC ב-none mode ✗') : 'חסר DMARC ✗' },
       };
@@ -530,7 +549,8 @@ async function runCheck(token, checkId) {
         const implemented = ctrl.score > 0 || ctrl.implementationStatus === 'Implemented';
         return {
           status: implemented ? 'passed' : 'failed',
-          actual_value: implemented ? 'Mailbox Audit מופעל' : 'Mailbox Audit לא מופעל',
+          actual_value: implemented ? `${ctrl.controlName}: Implemented (score ${ctrl.score}/${ctrl.maxScore})` : `${ctrl.controlName}: Not Implemented`,
+          //
           expected_value: 'AuditDisabled = False לכל תיבות הדואר',
           evidence: {
             'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
@@ -561,7 +581,7 @@ async function runCheck(token, checkId) {
       return {
         status: effectiveCtrl ? (effectiveImplemented ? 'passed' : 'failed') : 'warning',
         actual_value: effectiveCtrl
-          ? (effectiveImplemented ? `Safe Attachments מופעל (${effectiveCtrl.controlName})` : `Safe Attachments לא מופעל (${effectiveCtrl.controlName})`)
+          ? (effectiveImplemented ? `${effectiveCtrl.controlName}: Implemented (score ${effectiveCtrl.score}/${effectiveCtrl.maxScore})` : `${effectiveCtrl.controlName}: Not Implemented`)
           : 'לא נמצא ב-Secure Score — ייתכן שדורש Defender for Office 365 Plan 1',
         expected_value: 'Safe Attachments policy enabled for all users',
         evidence: effectiveCtrl ? {
@@ -585,7 +605,7 @@ async function runCheck(token, checkId) {
       return {
         status: effectiveCtrl ? (effectiveImplemented ? 'passed' : 'failed') : 'warning',
         actual_value: effectiveCtrl
-          ? (effectiveImplemented ? `Safe Links מופעל (${effectiveCtrl.controlName})` : `Safe Links לא מופעל (${effectiveCtrl.controlName})`)
+          ? (effectiveImplemented ? `${effectiveCtrl.controlName}: Implemented (score ${effectiveCtrl.score}/${effectiveCtrl.maxScore})` : `${effectiveCtrl.controlName}: Not Implemented`)
           : 'לא נמצא ב-Secure Score — ייתכן שדורש Defender for Office 365 Plan 1',
         expected_value: 'Safe Links policy enabled for Email and Office apps',
         evidence: effectiveCtrl ? {
@@ -615,7 +635,7 @@ async function runCheck(token, checkId) {
       return {
         status: effectiveCtrl ? (effectiveImplemented ? 'passed' : 'failed') : 'warning',
         actual_value: effectiveCtrl
-          ? (effectiveImplemented ? `Anti-Phishing מופעל (${effectiveCtrl.controlName})` : `Anti-Phishing לא מופעל (${effectiveCtrl.controlName})`)
+          ? (effectiveImplemented ? `${effectiveCtrl.controlName}: Implemented (score ${effectiveCtrl.score}/${effectiveCtrl.maxScore})` : `${effectiveCtrl.controlName}: Not Implemented`)
           : 'לא נמצא ב-Secure Score',
         expected_value: 'Anti-phishing policy with impersonation protection enabled',
         evidence: {
@@ -646,7 +666,8 @@ async function runCheck(token, checkId) {
       const pct = Math.round((score.currentScore / score.maxScore) * 100);
       return {
         status: pct >= 60 ? 'passed' : pct >= 40 ? 'warning' : 'failed',
-        actual_value: `${score.currentScore.toFixed(0)}/${score.maxScore.toFixed(0)} נקודות (${pct}%)`,
+        actual_value: `${score.currentScore.toFixed(0)} / ${score.maxScore.toFixed(0)} points (${pct}%)`,
+        //
         expected_value: 'ציון אבטחה ≥ 60%',
         evidence: {
           'ציון נוכחי': `${score.currentScore.toFixed(0)}`,
@@ -664,7 +685,8 @@ async function runCheck(token, checkId) {
       const implemented = ctrl && (ctrl.score > 0 || ctrl.implementationStatus === 'Implemented');
       return {
         status: ctrl ? (implemented ? 'passed' : 'failed') : 'warning',
-        actual_value: ctrl ? (implemented ? 'Customer Lockbox מופעל' : 'Customer Lockbox לא מופעל') : 'לא נמצא',
+        actual_value: ctrl ? (implemented ? `${ctrl.controlName}: Implemented (score ${ctrl.score}/${ctrl.maxScore})` : `${ctrl.controlName}: Not Implemented`) : 'Not found in Secure Score',
+        //
         expected_value: 'Customer Lockbox = Enabled',
         evidence: ctrl ? {
           'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
@@ -682,7 +704,8 @@ async function runCheck(token, checkId) {
       const implemented = ctrl && (ctrl.score > 0 || ctrl.implementationStatus === 'Implemented');
       return {
         status: ctrl ? (implemented ? 'passed' : 'failed') : 'warning',
-        actual_value: ctrl ? (implemented ? 'שיתוף חיצוני מוגבל' : 'שיתוף חיצוני פתוח') : 'לא נמצא ב-Secure Score',
+        actual_value: ctrl ? (implemented ? `${ctrl.controlName}: Implemented (score ${ctrl.score}/${ctrl.maxScore})` : `${ctrl.controlName}: Not Implemented`) : 'Not found in Secure Score',
+        //
         expected_value: 'External sharing = New and existing guests (לא "Anyone")',
         evidence: ctrl ? {
           'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
@@ -698,7 +721,8 @@ async function runCheck(token, checkId) {
       const implemented = ctrl && (ctrl.score > 0 || ctrl.implementationStatus === 'Implemented');
       return {
         status: ctrl ? (implemented ? 'passed' : 'failed') : 'warning',
-        actual_value: ctrl ? (implemented ? 'שיתוף OneDrive מוגבל' : 'שיתוף OneDrive פתוח') : 'לא נמצא',
+        actual_value: ctrl ? (implemented ? `${ctrl.controlName}: Implemented (score ${ctrl.score}/${ctrl.maxScore})` : `${ctrl.controlName}: Not Implemented`) : 'Not found in Secure Score',
+        //
         expected_value: 'OneDrive sharing ≤ New and existing guests',
         evidence: ctrl ? {
           'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
@@ -714,7 +738,8 @@ async function runCheck(token, checkId) {
       const implemented = ctrl && (ctrl.score > 0 || ctrl.implementationStatus === 'Implemented');
       return {
         status: ctrl ? (implemented ? 'passed' : 'failed') : 'warning',
-        actual_value: ctrl ? (implemented ? 'Legacy Auth מושבת ב-SharePoint' : 'Legacy Auth פעיל ב-SharePoint') : 'לא נמצא',
+        actual_value: ctrl ? (implemented ? `${ctrl.controlName}: Implemented (score ${ctrl.score}/${ctrl.maxScore})` : `${ctrl.controlName}: Not Implemented`) : 'Not found in Secure Score',
+        //
         expected_value: 'LegacyAuthProtocolsEnabled = False',
         evidence: ctrl ? {
           'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
@@ -730,7 +755,8 @@ async function runCheck(token, checkId) {
       const implemented = ctrl && (ctrl.score > 0 || ctrl.implementationStatus === 'Implemented');
       return {
         status: ctrl ? (implemented ? 'passed' : 'warning') : 'warning',
-        actual_value: ctrl ? (implemented ? 'סנכרון OneDrive מוגבל לדומיין' : 'סנכרון ללא הגבלת דומיין') : 'לא נמצא',
+        actual_value: ctrl ? (implemented ? `${ctrl.controlName}: Implemented (score ${ctrl.score}/${ctrl.maxScore})` : `${ctrl.controlName}: Not Implemented`) : 'Not found in Secure Score',
+        //
         expected_value: 'AllowedDomainGuids מוגדר ל-OneDrive Sync',
         evidence: ctrl ? {
           'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
@@ -748,7 +774,8 @@ async function runCheck(token, checkId) {
       const implemented = ctrl && (ctrl.score > 0 || ctrl.implementationStatus === 'Implemented');
       return {
         status: ctrl ? (implemented ? 'passed' : 'failed') : 'warning',
-        actual_value: ctrl ? (implemented ? 'גישה חיצונית Teams מוגבלת' : 'גישה חיצונית Teams פתוחה') : 'לא נמצא',
+        actual_value: ctrl ? (implemented ? `${ctrl.controlName}: Implemented (score ${ctrl.score}/${ctrl.maxScore})` : `${ctrl.controlName}: Not Implemented`) : 'Not found in Secure Score',
+        //
         expected_value: 'External access restricted to specific allowed domains only',
         evidence: ctrl ? {
           'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
@@ -764,7 +791,8 @@ async function runCheck(token, checkId) {
       const implemented = ctrl && (ctrl.score > 0 || ctrl.implementationStatus === 'Implemented');
       return {
         status: ctrl ? (implemented ? 'passed' : 'warning') : 'warning',
-        actual_value: ctrl ? (implemented ? 'גישת אורחים Teams מוגדרת בבטחה' : 'הגדרות אורחים Teams לא מאובטחות') : 'לא נמצא',
+        actual_value: ctrl ? (implemented ? `${ctrl.controlName}: Implemented (score ${ctrl.score}/${ctrl.maxScore})` : `${ctrl.controlName}: Not Implemented`) : 'Not found in Secure Score',
+        //
         expected_value: 'Guest access with limited permissions (no private calling)',
         evidence: ctrl ? {
           'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
@@ -780,7 +808,8 @@ async function runCheck(token, checkId) {
       const implemented = ctrl && (ctrl.score > 0 || ctrl.implementationStatus === 'Implemented');
       return {
         status: ctrl ? (implemented ? 'passed' : 'failed') : 'warning',
-        actual_value: ctrl ? (implemented ? 'אנונימיים לא יכולים להתחיל פגישות' : 'אנונימיים יכולים להתחיל פגישות') : 'לא נמצא',
+        actual_value: ctrl ? (implemented ? `${ctrl.controlName}: Implemented (score ${ctrl.score}/${ctrl.maxScore})` : `${ctrl.controlName}: Not Implemented`) : 'Not found in Secure Score',
+        //
         expected_value: 'AllowAnonymousUsersToStartMeeting = False',
         evidence: ctrl ? {
           'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
@@ -796,7 +825,8 @@ async function runCheck(token, checkId) {
       const implemented = ctrl && (ctrl.score > 0 || ctrl.implementationStatus === 'Implemented');
       return {
         status: ctrl ? (implemented ? 'passed' : 'warning') : 'warning',
-        actual_value: ctrl ? (implemented ? 'הקלטות מאוחסנות ב-OneDrive/SharePoint' : 'הגדרות הקלטה לא אופטימליות') : 'לא נמצא',
+        actual_value: ctrl ? (implemented ? `${ctrl.controlName}: Implemented (score ${ctrl.score}/${ctrl.maxScore})` : `${ctrl.controlName}: Not Implemented`) : 'Not found in Secure Score',
+        //
         expected_value: 'Recording storage = OneDrive (default in new Teams)',
         evidence: ctrl ? {
           'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
@@ -814,7 +844,8 @@ async function runCheck(token, checkId) {
       const implemented = ctrl && (ctrl.score > 0 || ctrl.implementationStatus === 'Implemented');
       return {
         status: ctrl ? (implemented ? 'passed' : 'failed') : 'warning',
-        actual_value: ctrl ? (implemented ? 'יומן ביקורת מאוחד פעיל' : 'יומן ביקורת לא פעיל') : 'לא נמצא',
+        actual_value: ctrl ? (implemented ? `${ctrl.controlName}: Implemented (score ${ctrl.score}/${ctrl.maxScore})` : `${ctrl.controlName}: Not Implemented`) : 'Not found in Secure Score',
+        //
         expected_value: 'Unified Audit Log enabled in Microsoft Purview',
         evidence: ctrl ? {
           'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
@@ -830,7 +861,8 @@ async function runCheck(token, checkId) {
       const implemented = ctrl && (ctrl.score > 0 || ctrl.implementationStatus === 'Implemented');
       return {
         status: ctrl ? (implemented ? 'passed' : 'failed') : 'warning',
-        actual_value: ctrl ? (implemented ? 'מדיניות DLP פעילה' : 'אין מדיניות DLP') : 'לא נמצא',
+        actual_value: ctrl ? (implemented ? `${ctrl.controlName}: Implemented (score ${ctrl.score}/${ctrl.maxScore})` : `${ctrl.controlName}: Not Implemented`) : 'Not found in Secure Score',
+        //
         expected_value: 'לפחות מדיניות DLP פעילה אחת ב-Exchange, SharePoint, Teams',
         evidence: ctrl ? {
           'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
@@ -846,7 +878,8 @@ async function runCheck(token, checkId) {
       const implemented = ctrl && (ctrl.score > 0 || ctrl.implementationStatus === 'Implemented');
       return {
         status: ctrl ? (implemented ? 'passed' : 'failed') : 'warning',
-        actual_value: ctrl ? (implemented ? 'תוויות רגישות מוגדרות' : 'אין תוויות רגישות') : 'לא נמצא',
+        actual_value: ctrl ? (implemented ? `${ctrl.controlName}: Implemented (score ${ctrl.score}/${ctrl.maxScore})` : `${ctrl.controlName}: Not Implemented`) : 'Not found in Secure Score',
+        //
         expected_value: 'Sensitivity labels created and published to users',
         evidence: ctrl ? {
           'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
@@ -954,7 +987,7 @@ Deno.serve(async (req) => {
       scan_job_id,
       tenant_id: tenant_record_id,
       check_id: checkId,
-      check_title: meta.title_he,
+      check_title: meta.title,
       domain: meta.domain,
       category: meta.category,
       severity: meta.severity,
