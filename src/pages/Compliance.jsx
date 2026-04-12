@@ -19,10 +19,8 @@ export default function Compliance() {
       setScans(completedScans);
       if (completedScans.length === 0) { setLoading(false); return; }
       if (completedScans.length > 0) setSelectedScan(completedScans[0].id);
-      const chunks = await Promise.all(
-        completedScans.map(sc => base44.entities.CheckResult.filter({ scan_job_id: sc.id }, '-created_date', 100))
-      );
-      setResults(chunks.flat());
+      const res = await base44.functions.invoke('getCheckResults', { scan_job_ids: completedScans.map(s => s.id) });
+      setResults(res.data?.results || []);
       setLoading(false);
     });
   }, []);

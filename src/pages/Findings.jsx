@@ -29,11 +29,8 @@ export default function Findings() {
       const completedScans = allScans.filter(sc => sc.status === 'completed');
       setScans(completedScans);
       if (completedScans.length === 0) { setLoading(false); return; }
-      // Fetch results for all completed scans in parallel
-      const chunks = await Promise.all(
-        completedScans.map(sc => base44.entities.CheckResult.filter({ scan_job_id: sc.id }, '-created_date', 100))
-      );
-      setResults(chunks.flat());
+      const res = await base44.functions.invoke('getCheckResults', { scan_job_ids: completedScans.map(s => s.id) });
+      setResults(res.data?.results || []);
       setLoading(false);
     });
   }, []);
