@@ -910,7 +910,8 @@ Deno.serve(async (req) => {
   const user = await base44.auth.me();
   if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { scan_job_id, tenant_record_id, customer_tenant_id, workspace_id } = await req.json();
+  const { scan_job_id, tenant_record_id, customer_tenant_id, workspace_id, user_email } = await req.json();
+  const resultOwner = user_email || user.email;
   if (!scan_job_id || !customer_tenant_id) {
     return Response.json({ error: 'scan_job_id and customer_tenant_id are required' }, { status: 400 });
   }
@@ -962,6 +963,7 @@ Deno.serve(async (req) => {
       expected_value: result.expected_value,
       evidence: JSON.stringify(result.evidence || {}),
       error_message: result.error_message,
+      created_by: resultOwner,
     });
 
     await base44.asServiceRole.entities.ScanJob.update(scan_job_id, {

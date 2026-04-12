@@ -61,6 +61,7 @@ export default function Scans() {
       tenant_record_id: tenant.id,
       customer_tenant_id: tenant.tenant_id,
       workspace_id: user?.id || 'default',
+      user_email: user?.email,
     });
     const updated = await base44.entities.ScanJob.list('-created_date', 50);
     setScans(updated);
