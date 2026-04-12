@@ -12,6 +12,8 @@ import './domains/m365AdminCenter';
 import './domains/defenderEmailSecurity';
 import './domains/intune';
 import './domains/entraIdExtended';
+import './domains/idProtection';
+import './domains/idGovernance';
 
 // Re-export registry for convenience
 export {
