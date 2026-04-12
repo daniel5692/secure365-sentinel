@@ -374,13 +374,31 @@ const CRED_STATUS = {
 
 function AppCredsDetail({ apps, search }) {
   const [expandedApp, setExpandedApp] = useState(null);
-  const filtered = apps.filter(a => !search ||
-    a.displayName?.toLowerCase().includes(search.toLowerCase()) ||
-    a.appId?.toLowerCase().includes(search.toLowerCase()));
-  if (filtered.length === 0) return <EmptyState />;
+  const [threatFilter, setThreatFilter] = useState('all');
+  const [credFilter, setCredFilter] = useState('all');
+
+  const filtered = apps.filter(a => {
+    if (search && !a.displayName?.toLowerCase().includes(search.toLowerCase()) && !a.appId?.toLowerCase().includes(search.toLowerCase())) return false;
+    if (threatFilter !== 'all' && a.maxThreat !== threatFilter) return false;
+    if (credFilter !== 'all' && a.credStatus !== credFilter) return false;
+    return true;
+  });
+
+  if (filtered.length === 0) return (
+    <div>
+      <div className="flex items-center gap-3 p-4 border-b border-border flex-wrap">
+        <FilterBar threatFilter={threatFilter} setThreatFilter={setThreatFilter} credFilter={credFilter} setCredFilter={setCredFilter} total={apps.length} shown={filtered.length} />
+      </div>
+      <EmptyState />
+    </div>
+  );
 
   return (
     <div className="overflow-x-auto">
+      {/* Filters */}
+      <div className="flex items-center gap-3 p-4 border-b border-border flex-wrap">
+        <FilterBar threatFilter={threatFilter} setThreatFilter={setThreatFilter} credFilter={credFilter} setCredFilter={setCredFilter} total={apps.length} shown={filtered.length} />
+      </div>
       {/* Table header */}
       <div className="grid grid-cols-12 gap-3 px-5 py-3 bg-secondary/30 text-[11px] font-semibold text-muted-foreground border-b border-border min-w-[600px]">
         <div className="col-span-4">שם אפליקציה</div>
@@ -489,6 +507,58 @@ function AppCredsDetail({ apps, search }) {
         })}
       </div>
     </div>
+  );
+}
+
+function FilterBar({ threatFilter, setThreatFilter, credFilter, setCredFilter, total, shown }) {
+  const hasFilters = threatFilter !== 'all' || credFilter !== 'all';
+  return (
+    <>
+      <div className="flex items-center gap-2 flex-wrap flex-1">
+        <span className="text-xs text-muted-foreground">רמת סיכון:</span>
+        {['all','high','medium','low','none'].map(v => {
+          const labels = { all: 'הכל', high: 'גבוה', medium: 'בינוני', low: 'נמוך', none: '—' };
+          const colors = {
+            all: threatFilter === 'all' ? 'bg-primary/20 text-primary border-primary/40' : 'bg-card border-border text-muted-foreground hover:text-foreground',
+            high: threatFilter === 'high' ? 'bg-red-500/20 text-red-400 border-red-500/40' : 'bg-card border-border text-muted-foreground hover:text-foreground',
+            medium: threatFilter === 'medium' ? 'bg-amber-500/20 text-amber-400 border-amber-500/40' : 'bg-card border-border text-muted-foreground hover:text-foreground',
+            low: threatFilter === 'low' ? 'bg-green-500/20 text-green-400 border-green-500/40' : 'bg-card border-border text-muted-foreground hover:text-foreground',
+            none: threatFilter === 'none' ? 'bg-slate-500/20 text-slate-400 border-slate-500/40' : 'bg-card border-border text-muted-foreground hover:text-foreground',
+          };
+          return (
+            <button key={v} onClick={() => setThreatFilter(v)}
+              className={cn('px-2.5 py-1 rounded-lg border text-xs transition-all', colors[v])}>
+              {labels[v]}
+            </button>
+          );
+        })}
+        <span className="text-xs text-muted-foreground mr-3">טוקן:</span>
+        {['all','active','expiring_soon','expired','no_credentials'].map(v => {
+          const labels = { all: 'הכל', active: 'פעיל', expiring_soon: 'פג בקרוב', expired: 'פג תוקף', no_credentials: 'ללא' };
+          const isActive = credFilter === v;
+          const activeColors = {
+            all: 'bg-primary/20 text-primary border-primary/40',
+            active: 'bg-green-500/20 text-green-400 border-green-500/40',
+            expiring_soon: 'bg-amber-500/20 text-amber-400 border-amber-500/40',
+            expired: 'bg-red-500/20 text-red-400 border-red-500/40',
+            no_credentials: 'bg-slate-500/20 text-slate-400 border-slate-500/40',
+          };
+          return (
+            <button key={v} onClick={() => setCredFilter(v)}
+              className={cn('px-2.5 py-1 rounded-lg border text-xs transition-all', isActive ? activeColors[v] : 'bg-card border-border text-muted-foreground hover:text-foreground')}>
+              {labels[v]}
+            </button>
+          );
+        })}
+      </div>
+      <div className="text-xs text-muted-foreground shrink-0">
+        {shown === total ? `${total} אפליקציות` : `${shown} מתוך ${total}`}
+        {hasFilters && (
+          <button onClick={() => { setThreatFilter('all'); setCredFilter('all'); }}
+            className="mr-2 text-primary hover:underline">נקה פילטרים</button>
+        )}
+      </div>
+    </>
   );
 }
 
