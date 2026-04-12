@@ -72,6 +72,46 @@ async function getSpoSettings(graphToken) {
   _spoSettingsCache = res || null;
   return _spoSettingsCache;
 }
+
+let _pbiToken = null;
+let _pbiSettingsCache = null;
+
+async function getPowerBiToken(tenantId) {
+  const res = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: Deno.env.get('AZURE_CLIENT_ID'),
+      client_secret: Deno.env.get('AZURE_CLIENT_SECRET'),
+      scope: 'https://analysis.windows.net/powerbi/api/.default',
+    }).toString(),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error_description || 'PBI token error');
+  return data.access_token;
+}
+
+async function getPbiSettings() {
+  if (_pbiSettingsCache) return _pbiSettingsCache;
+  if (!_pbiToken) return null;
+  const res = await fetch('https://api.powerbi.com/v1.0/myorg/admin/tenantsettings', {
+    headers: { Authorization: `Bearer ${_pbiToken}` },
+  }).catch(() => null);
+  if (!res?.ok) return null;
+  const data = await res.json().catch(() => null);
+  _pbiSettingsCache = data?.tenantSettings || null;
+  return _pbiSettingsCache;
+}
+
+function findPbiSetting(settings, ...names) {
+  if (!settings) return null;
+  for (const name of names) {
+    const found = settings.find(s => (s.name || s.settingName || '').toLowerCase().includes(name.toLowerCase()));
+    if (found) return found;
+  }
+  return null;
+}
 async function getSecureScoreControls(token) {
   if (_secureScoreCache) return _secureScoreCache;
   const data = await graphGet(token, '/security/secureScores?$top=1');
@@ -1044,7 +1084,15 @@ async function runCheck(token, checkId) {
     case 'CIS-5.1.2.3': { const p = await graphGet(token, '/policies/authorizationPolicy?$select=allowedToCreateTenants'); const v = p?.allowedToCreateTenants; return { status: v === false ? 'passed' : 'failed', actual_value: `allowedToCreateTenants: ${v}`, expected_value: 'false', evidence: { 'הגדרה': v, 'מצב': v === false ? 'תקין ✓' : 'משתמשים יכולים ליצור Tenants ✗' } }; }
     case 'CIS-5.1.2.4': return { status: 'manual', actual_value: 'Cannot verify Entra admin center restriction via Graph API', expected_value: 'Restrict access to Entra admin center = Yes', evidence: { 'הערה': 'Entra admin center → Users → User settings → Restrict access to Microsoft Entra admin center: Yes' } };
     case 'CIS-5.1.2.5': return { status: 'manual', actual_value: 'Cannot verify Sign-in branding via Graph API', expected_value: 'Show option to remain signed in = No', evidence: { 'הערה': 'Entra admin center → Identity → Company branding → Sign-in page → Stay signed in: Off' } };
-    case 'CIS-5.1.2.6': return { status: 'manual', actual_value: 'Cannot check LinkedIn connections via standard Graph API', expected_value: 'LinkedIn account connections = No', evidence: { 'הערה': 'Entra admin center → Identity → Users → User settings → LinkedIn: No' } };
+    case 'CIS-5.1.2.6': {
+      const pLi = await graphGet(token, '/policies/authorizationPolicy', 'beta').catch(() => null);
+      const linkedin = pLi?.linkedInConfiguration;
+      if (linkedin !== undefined) {
+        const isDisabled = linkedin === null || linkedin?.isEnabled === false || linkedin?.allowedGroups?.length === 0;
+        return { status: isDisabled ? 'passed' : 'failed', actual_value: `linkedInConfiguration: ${JSON.stringify(linkedin)}`, expected_value: 'isEnabled = false', evidence: { 'LinkedIn Config': JSON.stringify(linkedin), 'מצב': isDisabled ? 'תקין ✓' : 'LinkedIn פעיל ✗' } };
+      }
+      return { status: 'manual', actual_value: 'Cannot check LinkedIn connections via Graph API', expected_value: 'LinkedIn account connections = No', evidence: { 'הערה': 'Entra admin center → Identity → Users → User settings → LinkedIn: No' } };
+    }
 
     case 'CIS-5.1.3.1': {
       const dg = await graphGet(token, "/groups?$filter=groupTypes/any(c:c eq 'DynamicMembership')&$select=displayName,membershipRule&$top=50");
@@ -1056,8 +1104,28 @@ async function runCheck(token, checkId) {
 
     case 'CIS-5.1.4.1': { const p = await graphGet(token, '/policies/deviceRegistrationPolicy').catch(() => null); if (!p) return { status: 'warning', actual_value: 'Cannot access device registration policy', expected_value: 'Device join restricted', evidence: {} }; const s = p.azureADJoin?.allowedToJoin?.setting || 'all'; return { status: s !== 'all' ? 'passed' : 'failed', actual_value: `azureADJoin.allowedToJoin: ${s}`, expected_value: 'selected or none', evidence: { 'הגדרה': s, 'מצב': s !== 'all' ? 'תקין ✓' : 'כל משתמש יכול לצרף מכשיר ✗' } }; }
     case 'CIS-5.1.4.2': { const p = await graphGet(token, '/policies/deviceRegistrationPolicy').catch(() => null); const q = p?.userDeviceQuota; return { status: q != null && q <= 5 ? 'passed' : 'failed', actual_value: `userDeviceQuota: ${q ?? 'Unlimited'}`, expected_value: '≤ 5', evidence: { 'מכסה': q ?? 'Unlimited', 'מצב': q != null && q <= 5 ? 'תקין ✓' : 'הגדר מגבלה ✗' } }; }
-    case 'CIS-5.1.4.3': return { status: 'manual', actual_value: 'Cannot verify GA local admin setting via Graph API', expected_value: 'Global Administrator not auto local admin', evidence: { 'הערה': 'Entra admin center → Devices → Device settings → Additional local administrators' } };
-    case 'CIS-5.1.4.4': return { status: 'manual', actual_value: 'Cannot verify registering user local admin setting via Graph API', expected_value: 'Registering user not local admin', evidence: { 'הערה': 'Entra admin center → Devices → Device settings → Registering user is an administrator: Off' } };
+    case 'CIS-5.1.4.3': {
+      const p543 = await graphGet(token, '/policies/deviceRegistrationPolicy').catch(() => null);
+      if (!p543) return { status: 'warning', actual_value: 'Cannot access device registration policy', expected_value: 'GA not auto local admin', evidence: {} };
+      const joinCfg = p543.azureADJoin || {};
+      // Check if Global Administrators are auto-added as local admins
+      const gaLocalAdmin = joinCfg.localAdminsEnablement?.mode ?? joinCfg.enableGlobalAdmins ?? joinCfg.localAdmins?.enableGlobalAdmins;
+      if (gaLocalAdmin !== undefined) {
+        const isEnabled = gaLocalAdmin === true || gaLocalAdmin === 'enabled' || gaLocalAdmin === 'all';
+        return { status: !isEnabled ? 'passed' : 'failed', actual_value: `GA localAdmin: ${gaLocalAdmin}`, expected_value: 'GA not auto local admin on join', evidence: { 'GA כמנהל מקומי': isEnabled, 'ערך': gaLocalAdmin, 'מצב': !isEnabled ? 'תקין ✓' : 'GA נוסף אוטומטית כמנהל מקומי ✗' } };
+      }
+      return { status: 'manual', actual_value: `Policy accessible. azureADJoin: ${JSON.stringify(joinCfg).substring(0,300)}`, expected_value: 'Global Administrator not auto local admin', evidence: { 'הערה': 'Entra admin center → Devices → Device settings → Additional local administrators' } };
+    }
+    case 'CIS-5.1.4.4': {
+      const p544 = await graphGet(token, '/policies/deviceRegistrationPolicy').catch(() => null);
+      if (!p544) return { status: 'warning', actual_value: 'Cannot access device registration policy', expected_value: 'Registering user not local admin', evidence: {} };
+      const joinCfg2 = p544.azureADJoin || {};
+      const regUserAdmin = joinCfg2.isDeviceAdministratorEnabled ?? joinCfg2.registeringUserAsLocalAdministratorEnabled ?? joinCfg2.localAdmins?.enableDeviceOwners;
+      if (regUserAdmin !== undefined) {
+        return { status: regUserAdmin === false ? 'passed' : 'failed', actual_value: `registeringUserAsLocalAdmin: ${regUserAdmin}`, expected_value: 'false', evidence: { 'משתמש רושם כמנהל': regUserAdmin, 'מצב': regUserAdmin === false ? 'תקין ✓' : 'משתמש הרושם הוא מנהל מקומי ✗' } };
+      }
+      return { status: 'manual', actual_value: `Policy accessible. azureADJoin: ${JSON.stringify(joinCfg2).substring(0,300)}`, expected_value: 'Registering user not local admin', evidence: { 'הערה': 'Entra admin center → Devices → Device settings → Registering user is an administrator: Off' } };
+    }
     case 'CIS-5.1.4.5': { const p = await graphGet(token, '/policies/deviceRegistrationPolicy').catch(() => null); const en = p?.localAdminPassword?.isEnabled; return { status: en === true ? 'passed' : 'failed', actual_value: `LAPS isEnabled: ${en}`, expected_value: 'true', evidence: { 'LAPS': en, 'מצב': en ? 'תקין ✓' : 'הפעל LAPS ✗' } }; }
     case 'CIS-5.1.4.6': { const p = await graphGet(token, '/policies/deviceRegistrationPolicy').catch(() => null); const s = p?.selfServiceBitLockerEnabled; return { status: s === false ? 'passed' : 'warning', actual_value: `selfServiceBitLockerEnabled: ${s}`, expected_value: 'false', evidence: { 'ערך': s, 'הערה': 'Entra admin center → Devices → Device settings → Users can view BitLocker keys: No' } }; }
 
@@ -1101,8 +1169,34 @@ async function runCheck(token, checkId) {
       const addCtx = authConfig.featureSettings?.displayAppInformationRequiredState?.state || 'default';
       return { status: numMatch === 'enabled' && addCtx === 'enabled' ? 'passed' : 'failed', actual_value: `numberMatching: ${numMatch}, additionalContext: ${addCtx}`, expected_value: 'Both = enabled', evidence: { 'Number Matching': numMatch, 'Additional Context': addCtx, 'מצב': numMatch === 'enabled' && addCtx === 'enabled' ? 'תקין ✓' : 'הפעל Anti-fatigue features ✗' } };
     }
-    case 'CIS-5.2.3.2': return { status: 'manual', actual_value: 'Cannot verify custom banned passwords list via Graph API', expected_value: 'Custom banned passwords list in Enforced mode', evidence: { 'הערה': 'Entra admin center → Protection → Authentication methods → Password protection → Custom banned passwords: Enforced' } };
-    case 'CIS-5.2.3.3': return { status: 'manual', actual_value: 'Cannot verify on-prem password protection via Graph API', expected_value: 'DC Agent installed, Mode = Enforced', evidence: { 'הערה': 'Entra admin center → Protection → Authentication methods → Password protection → On-premises: Enforced' } };
+    case 'CIS-5.2.3.2': {
+      const betaSettings = await graphGet(token, '/settings', 'beta').catch(() => null);
+      const pwdSetting = (betaSettings?.value || []).find(s =>
+        s.displayName === 'Password Rule Settings' || s.templateId === '5cf42378-d67d-4f36-ba46-e8b86229381d'
+      );
+      if (pwdSetting?.values) {
+        const getVal = (n) => pwdSetting.values.find(v => v.name === n)?.value;
+        const enabled = getVal('EnableBannedPasswordList') === 'true';
+        const list = getVal('BannedPasswordList') || '';
+        const hasList = list.trim().length > 0;
+        return { status: enabled && hasList ? 'passed' : 'failed', actual_value: `EnableBannedPasswordList: ${enabled}, hasCustomList: ${hasList}`, expected_value: 'Enabled + custom list', evidence: { 'Banned List': enabled, 'רשימה מותאמת': hasList, 'מצב': enabled && hasList ? 'תקין ✓' : 'הגדר רשימת סיסמאות אסורות ✗' } };
+      }
+      return { status: 'manual', actual_value: 'Password protection settings not found via Graph API', expected_value: 'Custom banned passwords list in Enforced mode', evidence: { 'הערה': 'Entra admin center → Protection → Authentication methods → Password protection → Custom banned passwords: Enforced' } };
+    }
+    case 'CIS-5.2.3.3': {
+      const betaSettings3 = await graphGet(token, '/settings', 'beta').catch(() => null);
+      const pwdSetting3 = (betaSettings3?.value || []).find(s =>
+        s.displayName === 'Password Rule Settings' || s.templateId === '5cf42378-d67d-4f36-ba46-e8b86229381d'
+      );
+      if (pwdSetting3?.values) {
+        const getVal = (n) => pwdSetting3.values.find(v => v.name === n)?.value;
+        const onPremEnabled = getVal('EnableBannedPasswordCheckOnPremises') === 'true';
+        const mode = getVal('BannedPasswordCheckOnPremisesMode') || '';
+        const isEnforced = mode.toLowerCase() === 'enforced';
+        return { status: onPremEnabled && isEnforced ? 'passed' : 'failed', actual_value: `onPremEnabled: ${onPremEnabled}, mode: ${mode}`, expected_value: 'Enabled + Enforced mode', evidence: { 'On-prem': onPremEnabled, 'Mode': mode, 'מצב': onPremEnabled && isEnforced ? 'תקין ✓' : 'הגדר Enforced mode ✗' } };
+      }
+      return { status: 'manual', actual_value: 'Password protection settings not found via Graph API', expected_value: 'DC Agent installed, Mode = Enforced', evidence: { 'הערה': 'Entra admin center → Protection → Authentication methods → Password protection → On-premises: Enforced' } };
+    }
 
     case 'CIS-5.2.3.4': {
       const data534 = await graphGet(token, "/reports/authenticationMethods/userRegistrationDetails?$select=userPrincipalName,isMfaCapable&$top=100&$filter=userType eq 'member'").catch(() => null);
@@ -1121,8 +1215,34 @@ async function runCheck(token, checkId) {
     case 'CIS-5.3.1': { const pim = await graphGet(token, "/roleManagement/directory/roleAssignmentScheduleInstances?$filter=assignmentType eq 'Assigned'&$select=principalId,roleDefinitionId&$top=50").catch(() => null); if (!pim) return { status: 'warning', actual_value: 'Cannot access PIM - needs RoleManagement.Read.All', expected_value: 'All roles via PIM (Eligible)', evidence: {} }; const permanent = pim.value || []; return { status: permanent.length === 0 ? 'passed' : 'warning', actual_value: `${permanent.length} permanent role assignment(s)`, expected_value: 'All roles Eligible (not Permanent)', evidence: { 'קצאות קבועות': permanent.length, 'מצב': permanent.length === 0 ? 'תקין ✓' : 'יש הקצאות קבועות ✗' } }; }
     case 'CIS-5.3.2': { const rev = await graphGet(token, '/identityGovernance/accessReviews/definitions?$top=50').catch(() => null); if (!rev) return { status: 'warning', actual_value: 'Cannot access access reviews - needs AccessReview.Read.All', expected_value: 'Recurring review for guests', evidence: {} }; const guest = (rev.value || []).filter(r => JSON.stringify(r.scope || {}).toLowerCase().includes('guest')); return { status: guest.length > 0 ? 'passed' : 'failed', actual_value: `${guest.length} guest access review(s)`, expected_value: 'Recurring access review for all guests', evidence: { 'ביקורות': guest.map(r => r.displayName).join(', ') || 'אין', 'מצב': guest.length > 0 ? 'תקין ✓' : 'צור access review לאורחים ✗' } }; }
     case 'CIS-5.3.3': { const rev = await graphGet(token, '/identityGovernance/accessReviews/definitions?$top=50').catch(() => null); if (!rev) return { status: 'warning', actual_value: 'Cannot access access reviews', expected_value: 'Recurring review for privileged roles', evidence: {} }; const roleRev = (rev.value || []).filter(r => JSON.stringify(r.scope || {}).toLowerCase().includes('role')); return { status: roleRev.length > 0 ? 'passed' : 'failed', actual_value: `${roleRev.length} privileged role review(s)`, expected_value: 'Recurring access review for privileged roles', evidence: { 'ביקורות': roleRev.map(r => r.displayName).join(', ') || 'אין', 'מצב': roleRev.length > 0 ? 'תקין ✓' : 'צור access review לתפקידים ✗' } }; }
-    case 'CIS-5.3.4': return { status: 'manual', actual_value: 'Cannot verify PIM approval for Global Admin via Graph API', expected_value: 'PIM Global Admin: Require approval = Yes', evidence: { 'הערה': 'Entra admin center → Identity governance → PIM → Entra roles → Global Administrator → Settings → Require approval: Yes' } };
-    case 'CIS-5.3.5': return { status: 'manual', actual_value: 'Cannot verify PIM approval for Privileged Role Admin via Graph API', expected_value: 'PIM Privileged Role Admin: Require approval = Yes', evidence: { 'הערה': 'Entra admin center → Identity governance → PIM → Entra roles → Privileged Role Administrator → Settings → Require approval: Yes' } };
+    case 'CIS-5.3.4': {
+      // GA role template ID
+      const GA_ID = '62e90394-69f5-4237-9190-012177145e10';
+      const asgn534 = await graphGet(token, `/policies/roleManagementPolicyAssignments?$filter=scopeId eq '/' and scopeType eq 'DirectoryRole' and roleDefinitionId eq '${GA_ID}'`).catch(() => null);
+      if (!asgn534?.value?.length) return { status: 'warning', actual_value: 'Cannot access PIM policies — add RoleManagement.Read.All permission', expected_value: 'Approval required for GA activation', evidence: { 'הרשאה נדרשת': 'RoleManagement.Read.All' } };
+      const policyId534 = asgn534.value[0].policyId;
+      const policy534 = await graphGet(token, `/policies/roleManagementPolicies/${policyId534}?$expand=rules`).catch(() => null);
+      const approvalRule534 = (policy534?.rules || []).find(r => r['@odata.type']?.toLowerCase().includes('approval'));
+      const isRequired534 = approvalRule534?.setting?.isApprovalRequired;
+      if (isRequired534 !== undefined) {
+        return { status: isRequired534 ? 'passed' : 'failed', actual_value: `isApprovalRequired: ${isRequired534}`, expected_value: 'true', evidence: { 'אישור נדרש': isRequired534, 'מדיניות': policyId534, 'מצב': isRequired534 ? 'תקין ✓' : 'הפעל דרישת אישור ✗' } };
+      }
+      return { status: 'manual', actual_value: 'PIM policy found but approval rule unclear', expected_value: 'PIM Global Admin: Require approval = Yes', evidence: { 'הערה': 'Entra admin center → Identity governance → PIM → Entra roles → Global Administrator → Settings → Require approval: Yes' } };
+    }
+    case 'CIS-5.3.5': {
+      // Privileged Role Administrator template ID
+      const PRA_ID = 'e8611ab8-c189-46e8-94e1-60213ab1f814';
+      const asgn535 = await graphGet(token, `/policies/roleManagementPolicyAssignments?$filter=scopeId eq '/' and scopeType eq 'DirectoryRole' and roleDefinitionId eq '${PRA_ID}'`).catch(() => null);
+      if (!asgn535?.value?.length) return { status: 'warning', actual_value: 'Cannot access PIM policies — add RoleManagement.Read.All permission', expected_value: 'Approval required for PRA activation', evidence: { 'הרשאה נדרשת': 'RoleManagement.Read.All' } };
+      const policyId535 = asgn535.value[0].policyId;
+      const policy535 = await graphGet(token, `/policies/roleManagementPolicies/${policyId535}?$expand=rules`).catch(() => null);
+      const approvalRule535 = (policy535?.rules || []).find(r => r['@odata.type']?.toLowerCase().includes('approval'));
+      const isRequired535 = approvalRule535?.setting?.isApprovalRequired;
+      if (isRequired535 !== undefined) {
+        return { status: isRequired535 ? 'passed' : 'failed', actual_value: `isApprovalRequired: ${isRequired535}`, expected_value: 'true', evidence: { 'אישור נדרש': isRequired535, 'מדיניות': policyId535, 'מצב': isRequired535 ? 'תקין ✓' : 'הפעל דרישת אישור ✗' } };
+      }
+      return { status: 'manual', actual_value: 'PIM policy found but approval rule unclear', expected_value: 'PIM Privileged Role Admin: Require approval = Yes', evidence: { 'הערה': 'Entra admin center → Identity governance → PIM → Entra roles → Privileged Role Administrator → Settings → Require approval: Yes' } };
+    }
 
     // --- Teams Extended ---
     case 'CIS-8.1.1': case 'CIS-8.1.2': case 'CIS-8.2.1': case 'CIS-8.2.2': case 'CIS-8.5.1': case 'CIS-8.5.2': case 'CIS-8.5.3': case 'CIS-8.5.9': {
@@ -1140,11 +1260,40 @@ async function runCheck(token, checkId) {
       return { status: 'manual', actual_value: 'Teams API not accessible via standard Graph (requires Teams PowerShell)', expected_value: 'See Teams Admin Center', evidence: { 'הערה': noteT2[checkId] || 'Teams Admin Center' } };
     }
 
-    // --- Microsoft Fabric ---
+    // --- Microsoft Fabric (Power BI Admin API) ---
     case 'CIS-9.1.1': case 'CIS-9.1.2': case 'CIS-9.1.3': case 'CIS-9.1.4': case 'CIS-9.1.5':
     case 'CIS-9.1.6': case 'CIS-9.1.7': case 'CIS-9.1.8': case 'CIS-9.1.9': case 'CIS-9.1.10':
-    case 'CIS-9.1.11': case 'CIS-9.1.12':
-      return { status: 'manual', actual_value: 'Microsoft Fabric settings not accessible via Microsoft Graph API', expected_value: 'See Fabric admin portal', evidence: { 'הערה': 'app.powerbi.com/admin-portal/tenantSettings', 'API נדרש': 'Power BI Fabric Admin API' } };
+    case 'CIS-9.1.11': case 'CIS-9.1.12': {
+      const pbiSettings = await getPbiSettings();
+      if (!pbiSettings) {
+        return { status: 'manual', actual_value: 'Power BI Admin API not accessible — add Tenant.Read.All to Power BI Service', expected_value: 'See Fabric admin portal', evidence: { 'הרשאה נדרשת': 'Power BI Service → Tenant.Read.All', 'פורטל': 'app.powerbi.com/admin-portal/tenantSettings' } };
+      }
+      // Map each check to the Power BI tenant setting name + desired state
+      const fabricMap = {
+        'CIS-9.1.1': { keys: ['ExternalSharingEnabled','ShareWithExternalUsers','ExternalUserSharingEnabled'], wantEnabled: false, label: 'Guest access' },
+        'CIS-9.1.2': { keys: ['ExternalInvitationEnabled','InviteExternalUsers','AllowExternalInvitation'], wantEnabled: false, label: 'External invitations' },
+        'CIS-9.1.3': { keys: ['AllowGuestUserToAccessSharedContent','GuestUserAccessSharedContent'], wantEnabled: false, label: 'Guest content access' },
+        'CIS-9.1.4': { keys: ['PublishToWeb'], wantEnabled: false, label: 'Publish to web' },
+        'CIS-9.1.5': { keys: ['AllowRVisuals','InteractWithRVisuals','AllowPythonVisuals','PythonVisuals'], wantEnabled: false, label: 'R/Python visuals' },
+        'CIS-9.1.6': { keys: ['SensitivityLabelsEnabled','MicrosoftInformationProtectionSensitivityLabels'], wantEnabled: true, label: 'Sensitivity labels' },
+        'CIS-9.1.7': { keys: ['ShareableLinks','AllowShareableLinks'], wantEnabled: false, label: 'Shareable links' },
+        'CIS-9.1.8': { keys: ['ExternalDataSharingEnabled','AllowExternalDataSharing'], wantEnabled: false, label: 'External data sharing' },
+        'CIS-9.1.9': { keys: ['ResourceKeyAuthenticationEnabled','EmbedCodesEnabled','EmbedCodeAuthentication'], wantEnabled: false, label: 'ResourceKey authentication' },
+        'CIS-9.1.10': { keys: ['ServicePrincipalsCanUseApis','ServicePrincipalAccess'], wantEnabled: false, label: 'Service Principal API access' },
+        'CIS-9.1.11': { keys: ['ServicePrincipalsCanCreateProfiles','ServicePrincipalsProfiles'], wantEnabled: false, label: 'SP create profiles' },
+        'CIS-9.1.12': { keys: ['ServicePrincipalsCanCreateWorkspaces','CreateWorkspaces'], wantEnabled: false, label: 'SP create workspaces/pipelines' },
+      };
+      const { keys, wantEnabled, label } = fabricMap[checkId] || { keys: [], wantEnabled: false, label: checkId };
+      const setting = findPbiSetting(pbiSettings, ...keys);
+      if (setting) {
+        const isEnabled = setting.enabled ?? setting.isEnabled;
+        const passed = wantEnabled ? isEnabled === true : isEnabled === false;
+        return { status: passed ? 'passed' : 'failed', actual_value: `${setting.name || setting.settingName}: enabled=${isEnabled}`, expected_value: `enabled = ${wantEnabled}`, evidence: { 'Setting': setting.name || setting.settingName, 'Enabled': isEnabled, 'מצב': passed ? 'תקין ✓' : `יש לשנות ל-${wantEnabled} ✗` } };
+      }
+      // Setting not found by name - list available settings for debug
+      const available = pbiSettings.slice(0,20).map(s => s.name || s.settingName).join(', ');
+      return { status: 'warning', actual_value: `Power BI API accessible (${pbiSettings.length} settings) but setting for '${label}' not found`, expected_value: `enabled = ${wantEnabled}`, evidence: { 'בדיקה': label, 'הגדרות זמינות (20 ראשונות)': available, 'פורטל': 'app.powerbi.com/admin-portal/tenantSettings' } };
+    }
 
     // --- Exchange Extended (via Exchange REST API) ---
     case 'CIS-6.5.2': {
@@ -1392,6 +1541,8 @@ Deno.serve(async (req) => {
   _secureScoreCache = null;
   _exToken = null;
   _spoSettingsCache = null;
+  _pbiToken = null;
+  _pbiSettingsCache = null;
 
   const base44 = createClientFromRequest(req);
   const user = await base44.auth.me();
@@ -1416,6 +1567,8 @@ Deno.serve(async (req) => {
     token = await getAccessToken(customer_tenant_id);
     // Try Exchange token (non-fatal)
     _exToken = await getExchangeToken(customer_tenant_id).catch(() => null);
+    // Try Power BI token (non-fatal)
+    _pbiToken = await getPowerBiToken(customer_tenant_id).catch(() => null);
   } catch (err) {
     await base44.asServiceRole.entities.ScanJob.update(scan_job_id, {
       status: 'failed',
