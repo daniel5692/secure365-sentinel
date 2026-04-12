@@ -9,6 +9,7 @@ import './domains/sharepoint';
 import './domains/teams';
 import './domains/purview';
 import './domains/m365AdminCenter';
+import './domains/defenderEmailSecurity';
 
 // Re-export registry for convenience
 export {
