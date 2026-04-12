@@ -62,8 +62,25 @@ export default function Tenants() {
     }
   };
 
-  const handleDelete = async (id) => {
-    await base44.entities.ConnectedTenant.delete(id);
+  const handleDelete = async (tenant) => {
+    if (!window.confirm(`האם למחוק את "${tenant.tenant_name}" וכל נתוני הסריקות שלו?`)) return;
+
+    // Delete all related data for this tenant
+    const [scans, checkResults, reports, snapshots] = await Promise.all([
+      base44.entities.ScanJob.filter({ tenant_id: tenant.id }),
+      base44.entities.CheckResult.filter({ tenant_id: tenant.id }),
+      base44.entities.Report.filter({ tenant_id: tenant.id }),
+      base44.entities.InventorySnapshot.filter({ tenant_id: tenant.id }),
+    ]);
+
+    await Promise.all([
+      ...scans.map(s => base44.entities.ScanJob.delete(s.id)),
+      ...checkResults.map(r => base44.entities.CheckResult.delete(r.id)),
+      ...reports.map(r => base44.entities.Report.delete(r.id)),
+      ...snapshots.map(s => base44.entities.InventorySnapshot.delete(s.id)),
+    ]);
+
+    await base44.entities.ConnectedTenant.delete(tenant.id);
     loadTenants();
   };
 
@@ -185,7 +202,7 @@ export default function Tenants() {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem onClick={() => handleReConsent(tenant)}>חדש Consent</DropdownMenuItem>
-                      <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(tenant.id)}>
+                      <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(tenant)}>
                         <Trash2 className="w-4 h-4 ml-2" />נתק טננט
                       </DropdownMenuItem>
                     </DropdownMenuContent>
