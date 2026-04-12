@@ -1092,6 +1092,7 @@ Deno.serve(async (req) => {
   }
 
   const summary = { passed: 0, failed: 0, warning: 0, manual: 0, not_applicable: 0, error: 0 };
+  const checkResultBatch = [];
 
   for (let i = 0; i < ALL_CHECKS.length; i++) {
     const checkId = ALL_CHECKS[i];
@@ -1104,7 +1105,7 @@ Deno.serve(async (req) => {
     const meta = CHECK_META[checkId];
     summary[result.status] = (summary[result.status] || 0) + 1;
 
-    await base44.asServiceRole.entities.CheckResult.create({
+    checkResultBatch.push({
       workspace_id: workspace_id || 'default',
       scan_job_id,
       tenant_id: tenant_record_id,
@@ -1121,10 +1122,19 @@ Deno.serve(async (req) => {
       created_by: resultOwner,
     });
 
-    await base44.asServiceRole.entities.ScanJob.update(scan_job_id, {
-      completed_checks: i + 1,
-      progress: Math.round(((i + 1) / ALL_CHECKS.length) * 100),
-    });
+    // Update progress every 10 checks to avoid rate limiting
+    if ((i + 1) % 10 === 0 || i === ALL_CHECKS.length - 1) {
+      await base44.asServiceRole.entities.ScanJob.update(scan_job_id, {
+        completed_checks: i + 1,
+        progress: Math.round(((i + 1) / ALL_CHECKS.length) * 100),
+      });
+    }
+  }
+
+  // Bulk create all check results in batches of 25
+  const BATCH_SIZE = 25;
+  for (let i = 0; i < checkResultBatch.length; i += BATCH_SIZE) {
+    await base44.asServiceRole.entities.CheckResult.bulkCreate(checkResultBatch.slice(i, i + BATCH_SIZE));
   }
 
   const totalScored = summary.passed + summary.failed + summary.warning;
