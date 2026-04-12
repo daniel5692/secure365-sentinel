@@ -38,6 +38,40 @@ async function dnsQuery(name, type = 'TXT') {
 
 // Get cached Secure Score controls (fetched once per scan)
 let _secureScoreCache = null;
+let _exToken = null;
+let _spoSettingsCache = null;
+
+async function getExchangeToken(tenantId) {
+  const res = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: Deno.env.get('AZURE_CLIENT_ID'),
+      client_secret: Deno.env.get('AZURE_CLIENT_SECRET'),
+      scope: 'https://outlook.office365.com/.default',
+    }).toString(),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error_description || data.error || 'Exchange token error');
+  return data.access_token;
+}
+
+async function exchangeGet(tenantId, resource) {
+  if (!_exToken) return null;
+  const res = await fetch(`https://outlook.office365.com/adminapi/beta/${tenantId}/${resource}`, {
+    headers: { Authorization: `Bearer ${_exToken}`, 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+async function getSpoSettings(graphToken) {
+  if (_spoSettingsCache) return _spoSettingsCache;
+  const res = await graphGet(graphToken, '/admin/sharepoint/settings').catch(() => null);
+  _spoSettingsCache = res || null;
+  return _spoSettingsCache;
+}
 async function getSecureScoreControls(token) {
   if (_secureScoreCache) return _secureScoreCache;
   const data = await graphGet(token, '/security/secureScores?$top=1');
@@ -889,6 +923,147 @@ async function runCheck(token, checkId) {
       };
     }
 
+    // --- Exchange Extended (via Exchange REST API) ---
+    case 'CIS-6.5.2': {
+      const orgId = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
+      const org = orgId && _exToken ? await exchangeGet(orgId, 'Organization') : null;
+      const orgData = org?.value?.[0] || org;
+      if (orgData?.MailTipsExternalRecipientsTipsEnabled !== undefined) {
+        const enabled = orgData.MailTipsExternalRecipientsTipsEnabled;
+        return { status: enabled ? 'passed' : 'failed', actual_value: `MailTipsExternalRecipientsTipsEnabled: ${enabled}`, expected_value: 'true', evidence: { 'MailTips חיצוני': enabled, 'מצב': enabled ? 'תקין ✓' : 'כבה MailTips חיצוני ✗' } };
+      }
+      return { status: 'manual', actual_value: 'Exchange API not accessible', expected_value: 'MailTipsExternalRecipientsTipsEnabled = true', evidence: { 'הערה': 'Exchange Admin Center → Settings → Mail tips → External recipients' } };
+    }
+
+    case 'CIS-6.5.4': {
+      const orgId = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
+      const org = orgId && _exToken ? await exchangeGet(orgId, 'Organization') : null;
+      const orgData = org?.value?.[0] || org;
+      if (orgData?.SmtpClientAuthenticationDisabled !== undefined) {
+        const disabled = orgData.SmtpClientAuthenticationDisabled;
+        return { status: disabled ? 'passed' : 'failed', actual_value: `SmtpClientAuthenticationDisabled: ${disabled}`, expected_value: 'true', evidence: { 'SMTP AUTH מושבת': disabled, 'מצב': disabled ? 'תקין ✓' : 'SMTP AUTH פעיל ✗' } };
+      }
+      return { status: 'manual', actual_value: 'Exchange API not accessible', expected_value: 'SmtpClientAuthenticationDisabled = true', evidence: { 'הערה': 'Exchange Admin Center → Settings → Modern authentication → Disable SMTP AUTH' } };
+    }
+
+    case 'CIS-6.5.3': {
+      const orgId = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
+      const policies = orgId && _exToken ? await exchangeGet(orgId, 'OwaMailboxPolicy') : null;
+      const defaultPolicy = (policies?.value || []).find(p => p.Name === 'OwaMailboxPolicy-Default') || (policies?.value || [])[0];
+      if (defaultPolicy?.AdditionalStorageProvidersAvailable !== undefined) {
+        const restricted = !defaultPolicy.AdditionalStorageProvidersAvailable;
+        return { status: restricted ? 'passed' : 'failed', actual_value: `AdditionalStorageProvidersAvailable: ${defaultPolicy.AdditionalStorageProvidersAvailable}`, expected_value: 'false', evidence: { 'אחסון נוסף': defaultPolicy.AdditionalStorageProvidersAvailable, 'מדיניות': defaultPolicy.Name, 'מצב': restricted ? 'תקין ✓' : 'אחסון חיצוני פתוח ✗' } };
+      }
+      return { status: 'manual', actual_value: 'Exchange API not accessible', expected_value: 'AdditionalStorageProvidersAvailable = false', evidence: { 'הערה': 'Exchange Admin Center → OWA policies → Default → Features → Third-party storage: Off' } };
+    }
+
+    case 'CIS-6.2.3': {
+      const orgId = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
+      const rules = orgId && _exToken ? await exchangeGet(orgId, 'TransportRule') : null;
+      if (rules?.value) {
+        const externalTagRule = rules.value.filter(r => JSON.stringify(r).toLowerCase().includes('external') && (JSON.stringify(r).toLowerCase().includes('disclaimer') || JSON.stringify(r).toLowerCase().includes('prepend') || JSON.stringify(r).toLowerCase().includes('subject')));
+        return { status: externalTagRule.length > 0 ? 'passed' : 'failed', actual_value: `${externalTagRule.length} transport rule(s) tagging external senders`, expected_value: 'Rule prepending [External] to emails', evidence: { 'חוקים': externalTagRule.map(r => r.Name).join(', ') || 'אין', 'סה"כ חוקים': rules.value.length, 'מצב': externalTagRule.length > 0 ? 'תקין ✓' : 'אין תיוג שולחים חיצוניים ✗' } };
+      }
+      return { status: 'manual', actual_value: 'Exchange API not accessible', expected_value: 'Transport rule identifies external senders', evidence: { 'הערה': 'Exchange Admin Center → Mail flow → Rules → Create rule adding [External] prefix' } };
+    }
+
+    case 'CIS-6.2.2': {
+      const orgId = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
+      const rules = orgId && _exToken ? await exchangeGet(orgId, 'TransportRule') : null;
+      if (rules?.value) {
+        const bypassRules = rules.value.filter(r => JSON.stringify(r).includes('-1') || JSON.stringify(r).toLowerCase().includes('scl'));
+        return { status: bypassRules.length === 0 ? 'passed' : 'failed', actual_value: `${bypassRules.length} rule(s) potentially bypassing spam (SCL=-1)`, expected_value: 'No transport rules setting SCL=-1', evidence: { 'חוקים חשודים': bypassRules.map(r => r.Name).join(', ') || 'אין', 'סה"כ חוקים': rules.value.length, 'מצב': bypassRules.length === 0 ? 'תקין ✓' : 'בדוק חוקי transport ✗' } };
+      }
+      return { status: 'manual', actual_value: 'Exchange API not accessible', expected_value: 'No transport rules setting SCL=-1', evidence: { 'הערה': 'Exchange Admin Center → Mail flow → Rules → בדוק rules עם SCL=-1' } };
+    }
+
+    case 'CIS-6.1.3': {
+      const orgId = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
+      const org = orgId && _exToken ? await exchangeGet(orgId, 'Organization') : null;
+      const orgData = org?.value?.[0] || org;
+      if (orgData) {
+        return { status: orgData.AuditDisabled === false || orgData.AuditDisabled === undefined ? 'passed' : 'warning', actual_value: `Exchange org accessible; AuditDisabled: ${orgData.AuditDisabled ?? false}`, expected_value: 'No mailboxes with AuditBypassEnabled = true', evidence: { 'AuditDisabled': orgData.AuditDisabled ?? false, 'הערה': 'בדוק per-mailbox bypass ידנית' } };
+      }
+      return { status: 'manual', actual_value: 'Exchange API not accessible', expected_value: 'No mailboxes with AuditBypassEnabled = true', evidence: { 'הערה': 'PowerShell: Get-MailboxAuditBypassAssociation | Where { $_.AuditBypassEnabled -eq $true }' } };
+    }
+
+    case 'CIS-6.5.5': {
+      const orgId = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
+      const connectors = orgId && _exToken ? await exchangeGet(orgId, 'InboundConnector') : null;
+      if (connectors?.value) {
+        return { status: 'warning', actual_value: `${connectors.value.length} inbound connector(s) found`, expected_value: 'No direct send / unauthenticated connectors', evidence: { 'Connectors': connectors.value.map(c => c.Name).join(', ') || 'אין', 'הערה': 'בדוק ידנית שאין Direct Send connectors' } };
+      }
+      return { status: 'manual', actual_value: 'Exchange API not accessible', expected_value: 'Direct Send rejected', evidence: { 'הערה': 'Exchange Admin Center → Mail flow → Connectors' } };
+    }
+
+    // --- SharePoint Extended (via Graph /admin/sharepoint/settings) ---
+    case 'CIS-7.2.6': {
+      const spo = await getSpoSettings(token);
+      if (!spo) return { status: 'manual', actual_value: 'Cannot access SharePoint settings', expected_value: 'sharingCapability ≤ ExistingExternalUserSharingOnly', evidence: { 'הערה': 'SharePoint Admin Center → Policies → Sharing' } };
+      const cap = spo.sharingCapability;
+      const isSecure = ['disabled', 'existingExternalUserSharingOnly'].includes((cap || '').toLowerCase());
+      return { status: isSecure ? 'passed' : 'failed', actual_value: `sharingCapability: ${cap}`, expected_value: 'Disabled or ExistingExternalUserSharingOnly', evidence: { sharingCapability: cap, 'מצב': isSecure ? 'תקין ✓' : 'שיתוף Anonymous פעיל ✗' } };
+    }
+
+    case 'CIS-7.2.7': {
+      const spo = await getSpoSettings(token);
+      if (!spo) return { status: 'manual', actual_value: 'Cannot access SharePoint settings', expected_value: 'defaultSharingLinkType = direct', evidence: { 'הערה': 'SharePoint Admin Center → Policies → Sharing → Default link type' } };
+      const link = spo.defaultSharingLinkType;
+      return { status: link === 'direct' ? 'passed' : 'failed', actual_value: `defaultSharingLinkType: ${link}`, expected_value: 'direct (Specific people)', evidence: { defaultSharingLinkType: link, 'מצב': link === 'direct' ? 'תקין ✓' : 'קישור ברירת מחדל לא מוגבל ✗' } };
+    }
+
+    case 'CIS-7.2.11': {
+      const spo = await getSpoSettings(token);
+      if (!spo) return { status: 'manual', actual_value: 'Cannot access SharePoint settings', expected_value: 'defaultLinkPermission = view', evidence: { 'הערה': 'SharePoint Admin Center → Policies → Sharing → Default link permission' } };
+      const perm = spo.defaultLinkPermission;
+      return { status: perm === 'view' ? 'passed' : 'failed', actual_value: `defaultLinkPermission: ${perm}`, expected_value: 'view', evidence: { defaultLinkPermission: perm, 'מצב': perm === 'view' ? 'תקין ✓' : 'הרשאת Edit כברירת מחדל ✗' } };
+    }
+
+    case 'CIS-7.2.9': {
+      const spo = await getSpoSettings(token);
+      if (!spo) return { status: 'manual', actual_value: 'Cannot access SharePoint settings', expected_value: 'Guest access expires automatically', evidence: { 'הערה': 'SharePoint Admin Center → Policies → Sharing → Guest access expiration' } };
+      const required = spo.requireExternalUserExpirationRequired ?? spo.externalUserExpirationRequired;
+      const days = spo.externalUserExpireInDays;
+      return { status: required && days && days <= 30 ? 'passed' : required ? 'warning' : 'failed', actual_value: `expirationRequired: ${required}, expireInDays: ${days}`, expected_value: 'Expiration = true, days ≤ 30', evidence: { 'פקיעה נדרשת': required, 'ימים לפקיעה': days, 'מצב': required && days <= 30 ? 'תקין ✓' : 'הגדר פקיעת גישת אורח ✗' } };
+    }
+
+    case 'CIS-7.2.5': {
+      const spo = await getSpoSettings(token);
+      if (!spo) return { status: 'manual', actual_value: 'Cannot access SharePoint settings', expected_value: 'isResharingByExternalUsersEnabled = false', evidence: { 'הערה': 'SharePoint Admin Center → Policies → Sharing → Allow guests to share' } };
+      const canReshare = spo.isResharingByExternalUsersEnabled ?? spo.allowGuestUserShareToUsersNotInSiteCollection;
+      return { status: canReshare === false ? 'passed' : 'failed', actual_value: `isResharingByExternalUsersEnabled: ${canReshare}`, expected_value: 'false', evidence: { 'אורחים יכולים לשתף מחדש': canReshare, 'מצב': canReshare === false ? 'תקין ✓' : 'אורחים יכולים לשתף תוכן מחדש ✗' } };
+    }
+
+    case 'CIS-7.2.2': {
+      const spo = await getSpoSettings(token);
+      if (!spo) return { status: 'manual', actual_value: 'Cannot access SharePoint settings', expected_value: 'isAzureADB2BEnabled = true', evidence: { 'הערה': 'SharePoint Admin Center → Settings → SharePoint and OneDrive integration' } };
+      const b2b = spo.isAzureADB2BEnabled ?? spo.enableAzureADB2BIntegration;
+      return { status: b2b === true ? 'passed' : 'failed', actual_value: `isAzureADB2BEnabled: ${b2b}`, expected_value: 'true', evidence: { 'B2B Integration': b2b, 'מצב': b2b ? 'תקין ✓' : 'הפעל Azure AD B2B Integration ✗' } };
+    }
+
+    case 'CIS-7.3.2': {
+      const spo = await getSpoSettings(token);
+      if (!spo) return { status: 'manual', actual_value: 'Cannot access SharePoint settings', expected_value: 'Sync restricted to managed devices', evidence: { 'הערה': 'SharePoint Admin Center → Settings → Sync → Allow only on specific domains' } };
+      const allowedGuids = spo.allowedDomainGuidsForSyncApp;
+      const isRestricted = Array.isArray(allowedGuids) ? allowedGuids.length > 0 : !!allowedGuids;
+      return { status: isRestricted ? 'passed' : 'failed', actual_value: `allowedDomainGuidsForSyncApp: ${JSON.stringify(allowedGuids)}`, expected_value: 'At least one domain GUID defined', evidence: { 'GUIDs מוגדרים': isRestricted, 'ערך': JSON.stringify(allowedGuids), 'מצב': isRestricted ? 'תקין ✓' : 'סנכרון פתוח לכל מכשיר ✗' } };
+    }
+
+    case 'CIS-7.2.8': {
+      const spo = await getSpoSettings(token);
+      if (!spo) return { status: 'manual', actual_value: 'Cannot access SharePoint settings', expected_value: 'Sharing restricted to specific domains', evidence: { 'הערה': 'SharePoint Admin Center → Policies → Sharing → Limit sharing by domain' } };
+      const mode = spo.sharingDomainRestrictionMode;
+      return { status: mode && mode !== 'none' ? 'passed' : 'warning', actual_value: `sharingDomainRestrictionMode: ${mode}`, expected_value: 'AllowList or BlockList', evidence: { 'מצב הגבלה': mode, 'תוצאה': mode && mode !== 'none' ? 'תקין ✓' : 'שיתוף ללא הגבלת דומיינים ✗' } };
+    }
+
+    case 'CIS-7.2.10': {
+      const spo = await getSpoSettings(token);
+      if (!spo) return { status: 'manual', actual_value: 'Cannot access SharePoint settings', expected_value: 'Email attestation re-auth ≤ 30 days', evidence: { 'הערה': 'SharePoint Admin Center → Policies → Sharing → Verification code expiration' } };
+      const required = spo.emailAttestationRequired;
+      const days = spo.emailAttestationReAuthDays;
+      return { status: required && days && days <= 30 ? 'passed' : required ? 'warning' : 'failed', actual_value: `emailAttestationRequired: ${required}, reAuthDays: ${days}`, expected_value: 'Required = true, days ≤ 30', evidence: { 'attestation נדרש': required, 'ימים': days, 'מצב': required && days <= 30 ? 'תקין ✓' : 'הגדר אימות קוד ✗' } };
+    }
+
     default:
       return { status: 'manual', actual_value: 'בדיקה דורשת אימות ידני', expected_value: 'ראה הנחיות תיקון', evidence: { 'הערה': 'בדיקה זו דורשת אימות ידני בפורטל הרלוונטי' } };
   }
@@ -1060,7 +1235,10 @@ const CHECK_META = {
 const ALL_CHECKS = Object.keys(CHECK_META);
 
 Deno.serve(async (req) => {
-  _secureScoreCache = null; // reset cache for each scan
+  _secureScoreCache = null;
+  _exToken = null;
+  _spoSettingsCache = null;
+
   const base44 = createClientFromRequest(req);
   const user = await base44.auth.me();
   if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
@@ -1082,6 +1260,8 @@ Deno.serve(async (req) => {
   let token;
   try {
     token = await getAccessToken(customer_tenant_id);
+    // Try Exchange token (non-fatal)
+    _exToken = await getExchangeToken(customer_tenant_id).catch(() => null);
   } catch (err) {
     await base44.asServiceRole.entities.ScanJob.update(scan_job_id, {
       status: 'failed',
