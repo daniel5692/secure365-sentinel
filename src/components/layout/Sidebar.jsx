@@ -2,7 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import { 
   LayoutDashboard, Server, Scan, FileWarning, FileText, 
   Settings, Shield, ChevronLeft, ChevronRight, Users,
-  Activity, Building2
+  Activity, Building2, Database
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { path: "/compliance", icon: Shield, label: "תאימות" },
   { path: "/reports", icon: FileText, label: "דוחות" },
   { path: "/history", icon: Activity, label: "היסטוריה" },
+  { path: "/inventory", icon: Database, label: "מלאי טננט" },
 ];
 
 const ADMIN_ITEMS = [

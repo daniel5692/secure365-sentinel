@@ -15,6 +15,7 @@ import Reports from './pages/Reports';
 import History from './pages/History';
 import Settings from './pages/Settings';
 import Admin from './pages/Admin';
+import Inventory from './pages/Inventory';
 // Add page imports here
 
 const AuthenticatedApp = () => {
@@ -53,6 +54,7 @@ const AuthenticatedApp = () => {
         <Route path="/history" element={<History />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/admin" element={<Admin />} />
+        <Route path="/inventory" element={<Inventory />} />
         <Route path="*" element={<PageNotFound />} />
       </Route>
     </Routes>
