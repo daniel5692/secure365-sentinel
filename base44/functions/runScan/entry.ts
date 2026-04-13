@@ -470,56 +470,58 @@ async function runCheck(token, checkId) {
     // --- SECTION 3: Exchange Online ---
 
     case 'CIS-3.1.1': {
-      // Use Secure Score to check modern auth
-      const score = await getSecureScoreControls(token);
-      const ctrl = getControl(score, 'ModernAuth') || getControl(score, 'modernauth');
-      if (ctrl) {
-        const implemented = ctrl.score > 0 || ctrl.implementationStatus === 'Implemented';
+      // Direct Exchange REST API - same as Get-OrganizationConfig | Select OAuth2ClientProfileEnabled
+      const orgId311 = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
+      const org311 = orgId311 && _exToken ? await exchangeGet(orgId311, 'Organization') : null;
+      const orgData311 = org311?.value?.[0] || org311;
+      if (orgData311?.OAuth2ClientProfileEnabled !== undefined) {
+        const enabled = orgData311.OAuth2ClientProfileEnabled;
         return {
-          status: implemented ? 'passed' : 'failed',
-          actual_value: implemented ? `${ctrl.controlName}: Implemented (score ${ctrl.score}/${ctrl.maxScore})` : `${ctrl.controlName}: Not Implemented`,
-          //
+          status: enabled ? 'passed' : 'failed',
+          actual_value: `OAuth2ClientProfileEnabled: ${enabled}`,
           expected_value: 'OAuth2ClientProfileEnabled = True',
           evidence: {
-            'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
-            'סטטוס': ctrl.implementationStatus || 'לא ידוע',
-            'שם בקרה': ctrl.controlName,
-            'מצב': implemented ? 'תקין ✓' : 'דורש הפעלה ✗',
+            'OAuth2ClientProfileEnabled': enabled,
+            'מקור': 'Exchange REST API (real-time)',
+            'מצב': enabled ? 'Modern Auth מופעל ✓' : 'Modern Auth מושבת ✗',
           },
         };
       }
       return {
         status: 'warning',
-        actual_value: 'לא נמצא ב-Secure Score',
+        actual_value: 'לא ניתן לגשת ל-Exchange API',
         expected_value: 'OAuth2ClientProfileEnabled = True',
-        evidence: { 'הערה': 'בדוק ידנית: Connect-ExchangeOnline; Get-OrganizationConfig | Select OAuth2ClientProfileEnabled' },
+        evidence: { 'הערה': 'ודא ש-Exchange.ManageAsApp מוגדר ואפליקציה הוקצתה ל-Exchange Administrator role' },
       };
     }
 
     case 'CIS-3.2.1': {
-      // Use Secure Score for auto-forward check
-      const score = await getSecureScoreControls(token);
-      const ctrl = getControl(score, 'DisableAutoForwarding') || getControl(score, 'autoforward');
-      if (ctrl) {
-        const implemented = ctrl.score > 0 || ctrl.implementationStatus === 'Implemented';
+      // Direct Exchange REST API - same as Get-RemoteDomain | Select AutoForwardEnabled
+      const orgId321 = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
+      const remoteDomains321 = orgId321 && _exToken ? await exchangeGet(orgId321, 'RemoteDomain') : null;
+      if (remoteDomains321?.value) {
+        const domains = remoteDomains321.value;
+        const defaultDomain = domains.find(d => d.DomainName === '*') || domains[0];
+        const autoForward = defaultDomain?.AutoForwardEnabled;
+        const anyEnabled = domains.some(d => d.AutoForwardEnabled === true);
         return {
-          status: implemented ? 'passed' : 'failed',
-          actual_value: implemented ? `${ctrl.controlName}: Implemented (score ${ctrl.score}/${ctrl.maxScore})` : `${ctrl.controlName}: Not Implemented`,
-          //
+          status: !anyEnabled ? 'passed' : 'failed',
+          actual_value: `AutoForwardEnabled (Default): ${autoForward} | כל הדומיינים: ${anyEnabled ? 'לפחות אחד מאופשר' : 'כולם חסומים'}`,
           expected_value: 'AutoForwardEnabled = False על כל Remote Domains',
           evidence: {
-            'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
-            'סטטוס': ctrl.implementationStatus || 'לא ידוע',
-            'מצב': implemented ? 'תקין ✓' : 'דורש חסימה ✗',
+            'Default Domain AutoForward': autoForward,
+            'דומיינים עם AutoForward פעיל': domains.filter(d => d.AutoForwardEnabled).map(d => d.DomainName).join(', ') || 'אין',
+            'סך דומיינים': domains.length,
+            'מקור': 'Exchange REST API (real-time)',
+            'מצב': !anyEnabled ? 'תקין ✓' : 'AutoForward פעיל ✗',
           },
         };
       }
-      // Alternative: check via transport rules or remote domains via Secure Score description
       return {
         status: 'warning',
-        actual_value: 'לא נמצא ב-Secure Score',
+        actual_value: 'לא ניתן לגשת ל-Exchange API',
         expected_value: 'AutoForwardEnabled = False',
-        evidence: { 'הערה': 'ודא ב-Exchange Admin Center > Mail flow > Remote domains > Default > Allow automatic forwarding = Off' },
+        evidence: { 'הערה': 'ודא ש-Exchange.ManageAsApp מוגדר ואפליקציה הוקצתה ל-Exchange Administrator role' },
       };
     }
 
@@ -617,31 +619,28 @@ async function runCheck(token, checkId) {
     }
 
     case 'CIS-3.4.1': {
-      // Query Secure Score - exo_mailboxaudit reflects actual AuditDisabled org config
-      const score341 = await getSecureScoreControls(token);
-      const ctrl341 = (score341?.controlScores || []).find(c => c.controlName === 'exo_mailboxaudit');
-      if (ctrl341) {
-        const implemented = ctrl341.score > 0;
-        // implementationStatus contains the actual human-readable state from Microsoft
-        const statusText = (ctrl341.implementationStatus || '').replace(/<[^>]+>/g, '').trim();
+      // Direct Exchange REST API - same as Get-OrganizationConfig | Select AuditDisabled
+      const orgId341 = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
+      const org341 = orgId341 && _exToken ? await exchangeGet(orgId341, 'Organization') : null;
+      const orgData341 = org341?.value?.[0] || org341;
+      if (orgData341 !== null && orgData341 !== undefined && orgData341.AuditDisabled !== undefined) {
+        const auditDisabled = orgData341.AuditDisabled;
         return {
-          status: implemented ? 'passed' : 'failed',
-          actual_value: statusText || (implemented ? 'Mailbox auditing is enabled for all users' : 'Mailbox auditing for all users is disabled'),
+          status: auditDisabled === false ? 'passed' : 'failed',
+          actual_value: `AuditDisabled: ${auditDisabled}`,
           expected_value: 'AuditDisabled = false (תיעוד מופעל)',
           evidence: {
-            'שם בקרה': ctrl341.controlName,
-            'ציון': `${ctrl341.score}/${ctrl341.maxScore}`,
-            'סטטוס מ-Microsoft': statusText,
-            'משמעות': 'קורא ישירית מ-Get-OrganizationConfig | Select AuditDisabled',
-            'מצב': implemented ? 'תקין ✓' : 'תיעוד מושבת ✗',
+            'AuditDisabled': auditDisabled,
+            'מקור': 'Exchange REST API (real-time — זהה ל-Get-OrganizationConfig)',
+            'מצב': auditDisabled === false ? 'Mailbox Auditing מופעל ✓' : 'Mailbox Auditing מושבת ✗',
           },
         };
       }
       return {
         status: 'warning',
-        actual_value: 'לא נמצא נתון',
+        actual_value: 'לא ניתן לגשת ל-Exchange API',
         expected_value: 'AuditDisabled = false',
-        evidence: { 'הערה': 'בדוק Exchange Admin Center → Compliance Management → Mailbox Audit Logging' },
+        evidence: { 'הערה': 'ודא ש-Exchange.ManageAsApp מוגדר ואפליקציה הוקצתה ל-Exchange Administrator role' },
       };
     }
 
