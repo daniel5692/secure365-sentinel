@@ -647,10 +647,24 @@ async function runCheck(token, checkId) {
     }
 
     case 'CIS-3.4.1': {
-      // Direct Exchange REST API - same as Get-OrganizationConfig | Select AuditDisabled
+      // Get-OrganizationConfig | Select AuditDisabled
+      // AuditDisabled = false means auditing is ON (this is the desired state)
       const orgId341 = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
-      const org341 = orgId341 && _exToken ? await exchangeGet(orgId341, 'Organization') : null;
-      const orgData341 = org341?.value?.[0] || org341;
+      const org341Raw = orgId341 && _exToken ? await exchangeGet(orgId341, 'Organization') : null;
+      // v2.0 API returns: { value: [ {...} ] } or { StartIndex, FieldNames, RowValues } (batch format)
+      // Try multiple response shapes
+      let orgData341 = null;
+      if (org341Raw) {
+        if (Array.isArray(org341Raw.value) && org341Raw.value.length > 0) {
+          orgData341 = org341Raw.value[0];
+        } else if (org341Raw.AuditDisabled !== undefined) {
+          orgData341 = org341Raw;
+        } else if (org341Raw.FieldNames && org341Raw.RowValues) {
+          // Tabular format: convert to object
+          orgData341 = {};
+          org341Raw.FieldNames.forEach((f, i) => { orgData341[f] = org341Raw.RowValues[0]?.[i]; });
+        }
+      }
       if (orgData341 !== null && orgData341 !== undefined && orgData341.AuditDisabled !== undefined) {
         const auditDisabled = orgData341.AuditDisabled;
         return {
@@ -659,16 +673,26 @@ async function runCheck(token, checkId) {
           expected_value: 'AuditDisabled = false (תיעוד מופעל)',
           evidence: {
             'AuditDisabled': auditDisabled,
-            'מקור': 'Exchange REST API (real-time — זהה ל-Get-OrganizationConfig)',
+            'מקור': 'Exchange Admin REST API v2.0 (Get-OrganizationConfig)',
             'מצב': auditDisabled === false ? 'Mailbox Auditing מופעל ✓' : 'Mailbox Auditing מושבת ✗',
           },
         };
       }
+      // Log what we actually got for debugging
+      const debugInfo = org341Raw ? JSON.stringify(org341Raw).substring(0, 300) : 'null response';
+      console.error('CIS-3.4.1: Unexpected Exchange API response:', debugInfo);
       return {
         status: 'warning',
-        actual_value: 'לא ניתן לגשת ל-Exchange API',
+        actual_value: _exToken
+          ? `Exchange API נגיש אך תגובה לא צפויה. Raw: ${debugInfo.substring(0, 100)}`
+          : 'Exchange token לא התקבל — ודא Exchange.ManageAsAppV2 מוגדר',
         expected_value: 'AuditDisabled = false',
-        evidence: { 'הערה': 'ודא ש-Exchange.ManageAsApp מוגדר ואפליקציה הוקצתה ל-Exchange Administrator role' },
+        evidence: {
+          'Exchange Token': _exToken ? 'קיים ✓' : 'חסר ✗',
+          'Tenant Domain': _tenantDomain || 'לא נמצא',
+          'Raw Response (300 chars)': debugInfo,
+          'הערה': 'ודא Exchange.ManageAsAppV2 ב-App Registration וש-Service Principal קיבל תפקיד Exchange Administrator',
+        },
       };
     }
 
