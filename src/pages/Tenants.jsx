@@ -66,20 +66,22 @@ export default function Tenants() {
     if (!window.confirm(`האם למחוק את "${tenant.tenant_name}" וכל נתוני הסריקות שלו?`)) return;
     setLoading(true);
 
-    // 1. Get all scans for this tenant and delete via deleteScan (which handles check results too)
+    // 1. Delete scans one at a time to avoid rate limiting (each scan deletes 100+ results)
     const scans = await base44.entities.ScanJob.filter({ tenant_id: tenant.id });
-    await Promise.all(scans.map(s => base44.functions.invoke('deleteScan', { scan_job_id: s.id })));
+    for (const s of scans) {
+      await base44.functions.invoke('deleteScan', { scan_job_id: s.id });
+    }
 
-    // 2. Delete reports, snapshots (by Microsoft tenant_id GUID), and the tenant in parallel
+    // 2. Delete reports and snapshots sequentially
     const [reports, snapshots] = await Promise.all([
       base44.entities.Report.filter({ tenant_id: tenant.id }),
       base44.entities.InventorySnapshot.filter({ tenant_id: tenant.tenant_id }),
     ]);
-    await Promise.all([
-      ...reports.map(r => base44.entities.Report.delete(r.id)),
-      ...snapshots.map(s => base44.entities.InventorySnapshot.delete(s.id)),
-      base44.entities.ConnectedTenant.delete(tenant.id),
-    ]);
+    for (const r of reports) { await base44.entities.Report.delete(r.id); }
+    for (const s of snapshots) { await base44.entities.InventorySnapshot.delete(s.id); }
+
+    // 3. Finally delete the tenant itself
+    await base44.entities.ConnectedTenant.delete(tenant.id);
 
     loadTenants();
   };
