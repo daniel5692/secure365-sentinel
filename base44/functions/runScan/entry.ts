@@ -1588,6 +1588,50 @@ Deno.serve(async (req) => {
   let token;
   try {
     token = await getAccessToken(customer_tenant_id);
+
+    // Auto-assign Exchange Administrator role to our service principal in the customer tenant
+    // This is required for Exchange.ManageAsApp to work
+    try {
+      const CLIENT_ID = Deno.env.get('AZURE_CLIENT_ID');
+      const EXCHANGE_ADMIN_ROLE_TEMPLATE_ID = '29232cdf-9323-42fd-ade2-1d097af3e4de';
+
+      // Find our service principal in the customer tenant
+      const spRes = await fetch(`https://graph.microsoft.com/v1.0/servicePrincipals?$filter=appId eq '${CLIENT_ID}'&$select=id`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const spData = await spRes.json();
+      const spId = spData.value?.[0]?.id;
+
+      if (spId) {
+        // Get or activate Exchange Admin role
+        let roleRes = await fetch(`https://graph.microsoft.com/v1.0/directoryRoles?$filter=roleTemplateId eq '${EXCHANGE_ADMIN_ROLE_TEMPLATE_ID}'`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        let roleData = await roleRes.json();
+        let role = roleData.value?.[0];
+
+        if (!role) {
+          const activateRes = await fetch('https://graph.microsoft.com/v1.0/directoryRoles', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ roleTemplateId: EXCHANGE_ADMIN_ROLE_TEMPLATE_ID }),
+          });
+          role = await activateRes.json();
+        }
+
+        if (role?.id) {
+          // Assign role (ignore 400 = already assigned)
+          await fetch(`https://graph.microsoft.com/v1.0/directoryRoles/${role.id}/members/$ref`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ '@odata.id': `https://graph.microsoft.com/v1.0/directoryObjects/${spId}` }),
+          });
+          // Small delay to let the role propagate
+          await new Promise(r => setTimeout(r, 3000));
+        }
+      }
+    } catch (_) { /* non-fatal */ }
+
     // Try Exchange token (non-fatal)
     _exToken = await getExchangeToken(customer_tenant_id).catch(() => null);
     // Try Power BI token (non-fatal)
