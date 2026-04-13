@@ -617,34 +617,48 @@ async function runCheck(token, checkId) {
     }
 
     case 'CIS-3.4.1': {
-      const score = await getSecureScoreControls(token);
-      // Try all known control name variants including exact Secure Score name
-      const ctrl = getControl(score, 'exo_mailboxaudit') ||
-                   getControl(score, 'MailboxAudit') ||
-                   getControl(score, 'mailboxaudit') ||
-                   getControl(score, 'AuditLog') ||
-                   score?.controlScores?.find(c => c.controlName?.toLowerCase().includes('mailbox') && c.controlName?.toLowerCase().includes('audit'));
+      // Primary: query Exchange API directly for AuditDisabled
+      const orgId341 = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
+      const orgEx341 = orgId341 && _exToken ? await exchangeGet(orgId341, 'Organization') : null;
+      const orgData341 = orgEx341?.value?.[0] || orgEx341;
+      if (orgData341?.AuditDisabled !== undefined) {
+        const auditDisabled = orgData341.AuditDisabled;
+        return {
+          status: auditDisabled === false ? 'passed' : 'failed',
+          actual_value: `AuditDisabled: ${auditDisabled}`,
+          expected_value: 'AuditDisabled = false (תיעוד מופעל)',
+          evidence: {
+            'AuditDisabled': auditDisabled,
+            'משמעות': auditDisabled === false ? 'תיעוד סיירתיבת דואר מופעל ✓' : 'תיעוד סיירתיבת דואר מושבת ✗',
+            'תיקון': auditDisabled ? 'Set-OrganizationConfig -AuditDisabled $false' : null,
+          },
+        };
+      }
+      // Fallback: Secure Score
+      const score341 = await getSecureScoreControls(token);
+      const ctrl = getControl(score341, 'exo_mailboxaudit') ||
+                   getControl(score341, 'MailboxAudit') ||
+                   getControl(score341, 'mailboxaudit') ||
+                   score341?.controlScores?.find(c => c.controlName?.toLowerCase().includes('mailbox') && c.controlName?.toLowerCase().includes('audit'));
       if (ctrl) {
         const implemented = ctrl.score > 0 || ctrl.implementationStatus === 'Implemented';
         return {
           status: implemented ? 'passed' : 'failed',
-          actual_value: implemented ? `${ctrl.controlName}: Implemented (score ${ctrl.score}/${ctrl.maxScore})` : `${ctrl.controlName}: Not Implemented`,
-          expected_value: 'AuditDisabled = False לכל תיבות הדואר',
+          actual_value: `${ctrl.controlName}: ${implemented ? 'Implemented' : 'Not Implemented'} (${ctrl.score}/${ctrl.maxScore})`,
+          expected_value: 'AuditDisabled = False',
           evidence: {
             'שם בקרה': ctrl.controlName,
-            'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
+            'ציון': `${ctrl.score}/${ctrl.maxScore}`,
             'סטטוס': ctrl.implementationStatus || 'לא ידוע',
             'מצב': implemented ? 'תקין ✓' : 'דורש הפעלה ✗',
           },
         };
       }
-      // Fallback: list all control names for debug
-      const allNames = (score?.controlScores || []).map(c => c.controlName).join(', ');
       return {
         status: 'warning',
-        actual_value: 'לא נמצא ב-Secure Score',
+        actual_value: 'Exchange API אינו זמין (אין Exchange token)',
         expected_value: 'AuditDisabled = False',
-        evidence: { 'הערה': 'בדוק: Connect-ExchangeOnline; Get-OrganizationConfig | Select AuditDisabled', 'בקרות זמינות': allNames },
+        evidence: { 'הערה': 'Exchange token אינו מוגדר - בדוק הרשאות Exchange' },
       };
     }
 
