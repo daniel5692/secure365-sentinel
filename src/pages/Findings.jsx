@@ -6,6 +6,7 @@ import { DOMAIN_META } from "@/lib/security-checks";
 import SeverityBadge from "@/components/shared/SeverityBadge";
 import StatusBadge from "@/components/shared/StatusBadge";
 import FindingDetail from "@/components/findings/FindingDetail";
+import QuickOverrideMenu from "@/components/findings/QuickOverrideMenu";
 import { base44 } from "@/api/base44Client";
 import { getAllChecks } from "@/lib/security-checks";
 
@@ -191,8 +192,9 @@ export default function Findings() {
                   <div className="col-span-2">
                     <SeverityBadge severity={result.severity} size="sm" />
                   </div>
-                  <div className="col-span-2">
+                  <div className="col-span-2 flex items-center gap-2">
                     <StatusBadge status={result.status} size="sm" />
+                    <QuickOverrideMenu finding={result} onOverrideChange={handleOverrideChange} />
                   </div>
                   <div className="col-span-1 flex justify-end">
                     <ChevronLeft className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${expandedFinding === result.id ? '-rotate-90' : ''}`} />
