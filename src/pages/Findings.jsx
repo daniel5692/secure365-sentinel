@@ -25,9 +25,22 @@ export default function Findings() {
   const [resultsLoading, setResultsLoading] = useState(false);
   const [currentScanScore, setCurrentScanScore] = useState(null);
 
-  const handleOverrideChange = useCallback((updatedFinding) => {
+  const handleOverrideChange = useCallback(async (updatedFinding) => {
     setResults(prev => prev.map(r => r.id === updatedFinding.id ? { ...r, ...updatedFinding } : r));
-  }, []);
+    
+    // Recalculate scan score based on updated results
+    const updatedResults = results.map(r => r.id === updatedFinding.id ? { ...r, ...updatedFinding } : r);
+    const passed = updatedResults.filter(r => r.status === 'passed').length;
+    const total = updatedResults.length;
+    const newScore = Math.round((passed / total) * 100);
+    
+    setCurrentScanScore(newScore);
+    
+    // Update scan job with new score
+    if (selectedScan) {
+      await base44.entities.ScanJob.update(selectedScan, { overall_score: newScore });
+    }
+  }, [results, selectedScan]);
 
   // Read scan param from URL
   const urlParams = new URLSearchParams(window.location.search);
