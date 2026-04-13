@@ -8,7 +8,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
-import QuickOverrideButton from "@/components/scans/QuickOverrideButton";
 
 const STATUS_CONFIG = {
   completed: { icon: CheckCircle2, label: 'הושלם', cls: 'text-green-400 bg-green-500/10 border-green-500/30' },
@@ -300,9 +299,7 @@ export default function Scans() {
                           {scan.overall_score}
                         </div>
                       )}
-                      {scan.status === 'completed' && <QuickOverrideButton scanId={scan.id} onOverrideApplied={() => {
-                        setScans(prev => prev.map(s => s.id === scan.id ? { ...s } : s));
-                      }} />}
+
                       <button
                         onClick={(e) => handleDeleteScan(e, scan.id)}
                         disabled={deleting.has(scan.id)}
