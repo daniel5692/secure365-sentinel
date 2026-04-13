@@ -24,6 +24,10 @@ export default function Findings() {
   const [expandedFinding, setExpandedFinding] = useState(null);
   const [resultsLoading, setResultsLoading] = useState(false);
   const [currentScanScore, setCurrentScanScore] = useState(null);
+  // Read scan param from URL
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlScanId = urlParams.get('scan');
+  const [selectedScan, setSelectedScan] = useState(null);
 
   const handleOverrideChange = useCallback(async (updatedFinding) => {
     setResults(prev => prev.map(r => r.id === updatedFinding.id ? { ...r, ...updatedFinding } : r));
@@ -41,11 +45,6 @@ export default function Findings() {
       await base44.entities.ScanJob.update(selectedScan, { overall_score: newScore });
     }
   }, [results, selectedScan]);
-
-  // Read scan param from URL
-  const urlParams = new URLSearchParams(window.location.search);
-  const urlScanId = urlParams.get('scan');
-  const [selectedScan, setSelectedScan] = useState(null);
 
   useEffect(() => {
     const load = async () => {
