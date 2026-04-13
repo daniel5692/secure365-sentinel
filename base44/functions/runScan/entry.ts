@@ -617,48 +617,31 @@ async function runCheck(token, checkId) {
     }
 
     case 'CIS-3.4.1': {
-      // Primary: query Exchange API directly for AuditDisabled
-      const orgId341 = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
-      const orgEx341 = orgId341 && _exToken ? await exchangeGet(orgId341, 'Organization') : null;
-      const orgData341 = orgEx341?.value?.[0] || orgEx341;
-      if (orgData341?.AuditDisabled !== undefined) {
-        const auditDisabled = orgData341.AuditDisabled;
-        return {
-          status: auditDisabled === false ? 'passed' : 'failed',
-          actual_value: `AuditDisabled: ${auditDisabled}`,
-          expected_value: 'AuditDisabled = false (תיעוד מופעל)',
-          evidence: {
-            'AuditDisabled': auditDisabled,
-            'משמעות': auditDisabled === false ? 'תיעוד סיירתיבת דואר מופעל ✓' : 'תיעוד סיירתיבת דואר מושבת ✗',
-            'תיקון': auditDisabled ? 'Set-OrganizationConfig -AuditDisabled $false' : null,
-          },
-        };
-      }
-      // Fallback: Secure Score
+      // Query Secure Score - exo_mailboxaudit reflects actual AuditDisabled org config
       const score341 = await getSecureScoreControls(token);
-      const ctrl = getControl(score341, 'exo_mailboxaudit') ||
-                   getControl(score341, 'MailboxAudit') ||
-                   getControl(score341, 'mailboxaudit') ||
-                   score341?.controlScores?.find(c => c.controlName?.toLowerCase().includes('mailbox') && c.controlName?.toLowerCase().includes('audit'));
-      if (ctrl) {
-        const implemented = ctrl.score > 0 || ctrl.implementationStatus === 'Implemented';
+      const ctrl341 = (score341?.controlScores || []).find(c => c.controlName === 'exo_mailboxaudit');
+      if (ctrl341) {
+        const implemented = ctrl341.score > 0;
+        // implementationStatus contains the actual human-readable state from Microsoft
+        const statusText = (ctrl341.implementationStatus || '').replace(/<[^>]+>/g, '').trim();
         return {
           status: implemented ? 'passed' : 'failed',
-          actual_value: `${ctrl.controlName}: ${implemented ? 'Implemented' : 'Not Implemented'} (${ctrl.score}/${ctrl.maxScore})`,
-          expected_value: 'AuditDisabled = False',
+          actual_value: statusText || (implemented ? 'Mailbox auditing is enabled for all users' : 'Mailbox auditing for all users is disabled'),
+          expected_value: 'AuditDisabled = false (תיעוד מופעל)',
           evidence: {
-            'שם בקרה': ctrl.controlName,
-            'ציון': `${ctrl.score}/${ctrl.maxScore}`,
-            'סטטוס': ctrl.implementationStatus || 'לא ידוע',
-            'מצב': implemented ? 'תקין ✓' : 'דורש הפעלה ✗',
+            'שם בקרה': ctrl341.controlName,
+            'ציון': `${ctrl341.score}/${ctrl341.maxScore}`,
+            'סטטוס מ-Microsoft': statusText,
+            'משמעות': 'קורא ישירית מ-Get-OrganizationConfig | Select AuditDisabled',
+            'מצב': implemented ? 'תקין ✓' : 'תיעוד מושבת ✗',
           },
         };
       }
       return {
         status: 'warning',
-        actual_value: 'Exchange API אינו זמין (אין Exchange token)',
-        expected_value: 'AuditDisabled = False',
-        evidence: { 'הערה': 'Exchange token אינו מוגדר - בדוק הרשאות Exchange' },
+        actual_value: 'לא נמצא נתון',
+        expected_value: 'AuditDisabled = false',
+        evidence: { 'הערה': 'בדוק Exchange Admin Center → Compliance Management → Mailbox Audit Logging' },
       };
     }
 
