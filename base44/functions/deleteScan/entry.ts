@@ -1,5 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
 Deno.serve(async (req) => {
   const base44 = createClientFromRequest(req);
   const user = await base44.auth.me();
@@ -8,17 +10,20 @@ Deno.serve(async (req) => {
   const { scan_job_id } = await req.json();
   if (!scan_job_id) return Response.json({ error: 'scan_job_id required' }, { status: 400 });
 
-  // Delete all CheckResults for this scan (loop to handle pagination)
+  // Delete CheckResults sequentially in small batches to avoid rate limiting
   let deleted = 0;
   while (true) {
-    const results = await base44.asServiceRole.entities.CheckResult.filter({ scan_job_id }, '-created_date', 100);
+    const results = await base44.asServiceRole.entities.CheckResult.filter({ scan_job_id }, '-created_date', 50);
     if (!results || results.length === 0) break;
-    await Promise.all(results.map(r => base44.asServiceRole.entities.CheckResult.delete(r.id)));
+    for (const r of results) {
+      await base44.asServiceRole.entities.CheckResult.delete(r.id);
+      await sleep(50);
+    }
     deleted += results.length;
-    if (results.length < 100) break;
+    if (results.length < 50) break;
+    await sleep(200);
   }
 
-  // Delete the scan job itself
   await base44.asServiceRole.entities.ScanJob.delete(scan_job_id);
 
   return Response.json({ success: true, deleted_results: deleted });
