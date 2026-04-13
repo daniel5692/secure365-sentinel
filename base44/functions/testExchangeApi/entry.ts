@@ -109,24 +109,49 @@ Deno.serve(async (req) => {
   const assignStatus = assignRes.status;
   const assignText = await assignRes.text();
 
-  // Step 3d: Now test Exchange API
+  // Step 3d: Now test Exchange API - specifically AuditDisabled
   let exchangeTest = null;
-  if (assignStatus === 204 || assignStatus === 400) { // 400 might mean already assigned
-    const exRes = await fetch(`https://outlook.office365.com/adminapi/beta/${tenant_id}/Organization`, {
-      headers: { Authorization: `Bearer ${exToken}`, 'Content-Type': 'application/json' },
-    });
-    const exText = await exRes.text();
-    try { exchangeTest = { status: exRes.status, data: JSON.parse(exText) }; }
-    catch { exchangeTest = { status: exRes.status, raw: exText.substring(0, 500) }; }
+  const anchorMailbox = `UPN:SystemMailbox{bb558c35-97f1-4cb9-8ff7-d53741dc928c}@${tenant_id}.onmicrosoft.com`;
+  
+  // Try v2.0 POST (cmdlet style)
+  const exRes = await fetch(`https://outlook.office365.com/adminapi/v2.0/${tenant_id}/OrganizationConfig`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${exToken}`,
+      'Content-Type': 'application/json',
+      'X-AnchorMailbox': anchorMailbox,
+    },
+    body: JSON.stringify({ CmdletInput: { CmdletName: 'Get-OrganizationConfig', Parameters: {} } }),
+  });
+  const exText = await exRes.text();
+  let parsedEx;
+  try { parsedEx = JSON.parse(exText); } catch { parsedEx = { raw: exText.substring(0, 1000) }; }
+  
+  // Extract AuditDisabled specifically
+  let auditDisabledValue = 'NOT FOUND IN RESPONSE';
+  let fieldPresent = false;
+  if (parsedEx?.value?.[0]) {
+    const obj = parsedEx.value[0];
+    fieldPresent = 'AuditDisabled' in obj;
+    auditDisabledValue = fieldPresent ? obj.AuditDisabled : 'FIELD ABSENT';
+  } else if (parsedEx?.FieldNames) {
+    const idx = parsedEx.FieldNames.indexOf('AuditDisabled');
+    fieldPresent = idx !== -1;
+    auditDisabledValue = fieldPresent ? parsedEx.RowValues?.[0]?.[idx] : 'FIELD ABSENT';
   }
+
+  exchangeTest = {
+    status: exRes.status,
+    auditDisabledValue,
+    fieldPresent,
+    allKeys: parsedEx?.value?.[0] ? Object.keys(parsedEx.value[0]).filter(k => k.toLowerCase().includes('audit')) : [],
+    fieldNames: parsedEx?.FieldNames?.filter(f => f.toLowerCase().includes('audit')) || [],
+    rawSample: JSON.stringify(parsedEx).substring(0, 2000),
+  };
 
   return Response.json({
     success: true,
-    spId: sp.id,
-    spName: sp.displayName,
-    roleId: role.id,
     assignStatus,
-    assignResponse: assignText.substring(0, 300),
     exchangeTest,
   });
 });

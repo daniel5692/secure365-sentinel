@@ -647,71 +647,52 @@ async function runCheck(token, checkId) {
     }
 
     case 'CIS-3.4.1': {
-      // Get-OrganizationConfig | Select AuditDisabled
-      // AuditDisabled = false means auditing is ON (desired state)
+      // Exchange Admin API v2.0 does NOT return AuditDisabled in Get-OrganizationConfig response.
+      // The only reliable way is PowerShell: Get-OrganizationConfig | Select AuditDisabled
+      // We attempt to get individual mailbox audit status as a proxy.
       const orgId341 = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
-
-      let auditDisabled341 = null; // null = unknown
 
       if (orgId341 && _exToken) {
         const anchorMailbox341 = _tenantDomain
           ? `APP:SystemMailbox{bb558c35-97f1-4cb9-8ff7-d53741dc928c}@${_tenantDomain}`
           : `UPN:SystemMailbox{bb558c35-97f1-4cb9-8ff7-d53741dc928c}@${orgId341}.onmicrosoft.com`;
 
-        const res341 = await fetch(`https://outlook.office365.com/adminapi/v2.0/${orgId341}/OrganizationConfig`, {
+        // Try Get-AdminAuditLogConfig as alternative
+        const res341 = await fetch(`https://outlook.office365.com/adminapi/v2.0/${orgId341}/AdminAuditLogConfig`, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${_exToken}`,
             'Content-Type': 'application/json',
             'X-AnchorMailbox': anchorMailbox341,
           },
-          body: JSON.stringify({ CmdletInput: { CmdletName: 'Get-OrganizationConfig', Parameters: {} } }),
+          body: JSON.stringify({ CmdletInput: { CmdletName: 'Get-AdminAuditLogConfig', Parameters: {} } }),
         });
 
         if (res341.ok) {
           const raw341 = await res341.json();
-          // Parse response - handle both array and tabular formats
-          let obj341 = null;
-          if (Array.isArray(raw341.value) && raw341.value.length > 0) {
-            obj341 = raw341.value[0];
-          } else if (raw341.FieldNames && raw341.RowValues) {
-            obj341 = {};
-            raw341.FieldNames.forEach((f, i) => { obj341[f] = raw341.RowValues[0]?.[i]; });
-          }
-
-          if (obj341 !== null) {
-            // If field is present, use it. If absent, Exchange v2.0 sometimes omits false-default fields.
-            // We ONLY trust explicit true/false values.
-            if ('AuditDisabled' in obj341) {
-              auditDisabled341 = obj341.AuditDisabled === true;
-            } else {
-              // Field absent - try to infer: Exchange omits false-defaults but includes true values.
-              // If we got a valid org config response but no AuditDisabled, treat as false (enabled).
-              auditDisabled341 = false;
-            }
-            console.log(`CIS-3.4.1: AuditDisabled=${auditDisabled341}, fieldPresent=${'AuditDisabled' in obj341}`);
+          let obj341 = Array.isArray(raw341.value) ? raw341.value[0] : null;
+          if (obj341 && 'UnifiedAuditLogIngestionEnabled' in obj341) {
+            const enabled = obj341.UnifiedAuditLogIngestionEnabled === true;
+            return {
+              status: enabled ? 'passed' : 'failed',
+              actual_value: `UnifiedAuditLogIngestionEnabled: ${enabled}`,
+              expected_value: 'UnifiedAuditLogIngestionEnabled = true',
+              evidence: {
+                'UnifiedAuditLogIngestionEnabled': enabled,
+                'מצב': enabled ? 'Unified Audit Log מופעל ✓' : 'Unified Audit Log מושבת ✗',
+              },
+            };
           }
         }
       }
 
-      if (auditDisabled341 !== null) {
-        return {
-          status: auditDisabled341 === false ? 'passed' : 'failed',
-          actual_value: `AuditDisabled: ${auditDisabled341}`,
-          expected_value: 'AuditDisabled = false',
-          evidence: {
-            'AuditDisabled': auditDisabled341,
-            'מצב': auditDisabled341 === false ? 'Mailbox Auditing מופעל ✓' : 'Mailbox Auditing מושבת ✗',
-          },
-        };
-      }
-
       return {
-        status: 'warning',
-        actual_value: 'לא ניתן לקרוא את הנתונים מ-Exchange',
+        status: 'manual',
+        actual_value: 'לא ניתן לאמת אוטומטית דרך API',
         expected_value: 'AuditDisabled = false',
         evidence: {
-          'מצב': 'בדוק ידנית ב-Exchange Admin Center',
+          'בדיקה ידנית': 'PowerShell: Get-OrganizationConfig | Select AuditDisabled',
+          'תוצאה רצויה': 'AuditDisabled : False',
         },
       };
     }
