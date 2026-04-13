@@ -87,32 +87,19 @@ export default function Scans() {
     return () => clearInterval(interval);
   }, [scans, user]);
 
-  const deleteAllCheckResults = async (scanId) => {
-    // Loop until no more results (handles pagination >50)
-    while (true) {
-      const results = await base44.entities.CheckResult.filter({ scan_job_id: scanId }, '-created_date', 100);
-      if (!results || results.length === 0) break;
-      await Promise.all(results.map(r => base44.entities.CheckResult.delete(r.id)));
-      if (results.length < 100) break;
-    }
-  };
-
   const handleDeleteScan = async (e, scanId) => {
     e.preventDefault();
     e.stopPropagation();
     if (!confirm('למחוק את הסריקה וכל הממצאים שלה?')) return;
-    await deleteAllCheckResults(scanId);
-    await base44.entities.ScanJob.delete(scanId);
+    await base44.functions.invoke('deleteScan', { scan_job_id: scanId });
     setScans(prev => prev.filter(s => s.id !== scanId));
   };
 
   const handleDeleteAll = async () => {
     if (!confirm(`למחוק את כל ${filteredScans.length} הסריקות וכל הממצאים שלהן? פעולה זו אינה הפיכה.`)) return;
-    for (const scan of filteredScans) {
-      await deleteAllCheckResults(scan.id);
-      await base44.entities.ScanJob.delete(scan.id);
-    }
-    setScans(prev => prev.filter(s => !filteredScans.find(f => f.id === s.id)));
+    const ids = filteredScans.map(s => s.id);
+    await Promise.all(ids.map(id => base44.functions.invoke('deleteScan', { scan_job_id: id })));
+    setScans(prev => prev.filter(s => !ids.includes(s.id)));
   };
 
   const filteredScans = selectedTenant === 'all'
