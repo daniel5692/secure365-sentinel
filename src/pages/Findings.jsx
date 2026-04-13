@@ -47,21 +47,9 @@ export default function Findings() {
   const urlScanId = urlParams.get('scan');
   const [selectedScan, setSelectedScan] = useState(null);
 
-  const loadResultsForScan = async (scanId, allScans) => {
-    if (!scanId || scanId === 'all') {
-      // For 'all', load only the most recent scan to avoid huge payloads
-      const firstScan = allScans[0];
-      if (!firstScan) return;
-      const res = await base44.functions.invoke('getCheckResults', { scan_job_ids: [firstScan.id] });
-      setResults(res.data?.results || []);
-    } else {
-      const res = await base44.functions.invoke('getCheckResults', { scan_job_ids: [scanId] });
-      setResults(res.data?.results || []);
-    }
-  };
-
   useEffect(() => {
-    base44.auth.me().then(async user => {
+    const load = async () => {
+      const user = await base44.auth.me();
       const allScans = await base44.entities.ScanJob.filter({ created_by: user.email }, '-created_date', 20);
       const completedScans = allScans.filter(sc => sc.status === 'completed');
       setScans(completedScans);
@@ -69,10 +57,14 @@ export default function Findings() {
       const targetScan = urlScanId || completedScans[0]?.id;
       setSelectedScan(targetScan);
       setCurrentScanScore(completedScans[0]?.overall_score);
-      await loadResultsForScan(targetScan, completedScans);
+      if (targetScan) {
+        const res = await base44.functions.invoke('getCheckResults', { scan_job_ids: [targetScan] });
+        setResults(res.data?.results || []);
+      }
       setLoading(false);
-    });
-  }, []);
+    };
+    load();
+  }, [urlScanId]);
 
   const filtered = results
     .filter(r => {
@@ -116,6 +108,7 @@ export default function Findings() {
             setResults(res.data?.results || []);
           }
           setResultsLoading(false);
+          window.history.replaceState({}, '', `/findings?scan=${val}`);
         }}>
           <SelectTrigger className="w-64">
             <SelectValue placeholder="בחר סריקה" />
