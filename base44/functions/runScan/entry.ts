@@ -40,8 +40,11 @@ async function dnsQuery(name, type = 'TXT') {
 let _secureScoreCache = null;
 let _exToken = null;
 let _spoSettingsCache = null;
+let _tenantDomain = null; // e.g. contoso.onmicrosoft.com
 
 async function getExchangeToken(tenantId) {
+  // Exchange.ManageAsAppV2 is the new permission required for the v2.0 Admin API
+  // The scope is still https://outlook.office365.com/.default
   const res = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -54,15 +57,40 @@ async function getExchangeToken(tenantId) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error_description || data.error || 'Exchange token error');
+  console.log('Exchange token acquired, scope:', data.scope);
   return data.access_token;
 }
 
+// Maps old beta resource names to v2.0 endpoint + cmdlet names
+const EXCHANGE_RESOURCE_MAP = {
+  Organization:     { endpoint: 'OrganizationConfig', cmdlet: 'Get-OrganizationConfig' },
+  RemoteDomain:     { endpoint: 'RemoteDomain',       cmdlet: 'Get-RemoteDomain' },
+  OwaMailboxPolicy: { endpoint: 'OwaMailboxPolicy',   cmdlet: 'Get-OwaMailboxPolicy' },
+  TransportRule:    { endpoint: 'TransportRule',      cmdlet: 'Get-TransportRule' },
+  InboundConnector: { endpoint: 'InboundConnector',  cmdlet: 'Get-InboundConnector' },
+};
+
 async function exchangeGet(tenantId, resource) {
   if (!_exToken) return null;
-  const res = await fetch(`https://outlook.office365.com/adminapi/beta/${tenantId}/${resource}`, {
-    headers: { Authorization: `Bearer ${_exToken}`, 'Content-Type': 'application/json' },
+  const map = EXCHANGE_RESOURCE_MAP[resource] || { endpoint: resource, cmdlet: `Get-${resource}` };
+  // X-AnchorMailbox is mandatory for v2.0 — use fixed system mailbox GUID
+  const anchorMailbox = _tenantDomain
+    ? `APP:SystemMailbox{bb558c35-97f1-4cb9-8ff7-d53741dc928c}@${_tenantDomain}`
+    : `UPN:SystemMailbox{bb558c35-97f1-4cb9-8ff7-d53741dc928c}@${tenantId}.onmicrosoft.com`;
+  const res = await fetch(`https://outlook.office365.com/adminapi/v2.0/${tenantId}/${map.endpoint}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${_exToken}`,
+      'Content-Type': 'application/json',
+      'X-AnchorMailbox': anchorMailbox,
+    },
+    body: JSON.stringify({ CmdletInput: { CmdletName: map.cmdlet, Parameters: {} } }),
   });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    console.error(`Exchange v2.0 API error [${map.cmdlet}]: ${res.status} ${errText.substring(0, 200)}`);
+    return null;
+  }
   return res.json();
 }
 
@@ -1589,7 +1617,7 @@ Deno.serve(async (req) => {
   try {
     token = await getAccessToken(customer_tenant_id);
 
-    // Auto-assign Exchange Administrator role to our service principal in the customer tenant
+      // Auto-assign Exchange Administrator role to our service principal in the customer tenant
     // This is required for Exchange.ManageAsApp to work
     try {
       const CLIENT_ID = Deno.env.get('AZURE_CLIENT_ID');
@@ -1632,8 +1660,15 @@ Deno.serve(async (req) => {
       }
     } catch (_) { /* non-fatal */ }
 
+    // Get tenant's initial domain for X-AnchorMailbox header (required by Exchange v2.0 API)
+    try {
+      const domainsRes = await graphGet(token, '/domains?$filter=isInitial eq true&$select=id');
+      _tenantDomain = domainsRes?.value?.[0]?.id || null;
+      console.log('Tenant domain for Exchange API:', _tenantDomain);
+    } catch (_) { /* non-fatal */ }
+
     // Try Exchange token (non-fatal)
-    _exToken = await getExchangeToken(customer_tenant_id).catch(() => null);
+    _exToken = await getExchangeToken(customer_tenant_id).catch((e) => { console.error('Exchange token error:', e.message); return null; });
     // Try Power BI token (non-fatal)
     _pbiToken = await getPowerBiToken(customer_tenant_id).catch(() => null);
   } catch (err) {
