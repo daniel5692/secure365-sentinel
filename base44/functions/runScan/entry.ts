@@ -618,26 +618,33 @@ async function runCheck(token, checkId) {
 
     case 'CIS-3.4.1': {
       const score = await getSecureScoreControls(token);
-      const ctrl = getControl(score, 'MailboxAudit') || getControl(score, 'mailboxaudit') || getControl(score, 'AuditLog');
+      // Try all known control name variants including exact Secure Score name
+      const ctrl = getControl(score, 'exo_mailboxaudit') ||
+                   getControl(score, 'MailboxAudit') ||
+                   getControl(score, 'mailboxaudit') ||
+                   getControl(score, 'AuditLog') ||
+                   score?.controlScores?.find(c => c.controlName?.toLowerCase().includes('mailbox') && c.controlName?.toLowerCase().includes('audit'));
       if (ctrl) {
         const implemented = ctrl.score > 0 || ctrl.implementationStatus === 'Implemented';
         return {
           status: implemented ? 'passed' : 'failed',
           actual_value: implemented ? `${ctrl.controlName}: Implemented (score ${ctrl.score}/${ctrl.maxScore})` : `${ctrl.controlName}: Not Implemented`,
-          //
           expected_value: 'AuditDisabled = False לכל תיבות הדואר',
           evidence: {
+            'שם בקרה': ctrl.controlName,
             'ציון Secure Score': `${ctrl.score != null ? ctrl.score : '?'}${ctrl.maxScore != null ? '/' + ctrl.maxScore : ''}`,
             'סטטוס': ctrl.implementationStatus || 'לא ידוע',
             'מצב': implemented ? 'תקין ✓' : 'דורש הפעלה ✗',
           },
         };
       }
+      // Fallback: list all control names for debug
+      const allNames = (score?.controlScores || []).map(c => c.controlName).join(', ');
       return {
         status: 'warning',
-        actual_value: 'לא ניתן לבדוק דרך Graph API',
+        actual_value: 'לא נמצא ב-Secure Score',
         expected_value: 'AuditDisabled = False',
-        evidence: { 'הערה': 'בדוק: Connect-ExchangeOnline; Get-OrganizationConfig | Select AuditDisabled' },
+        evidence: { 'הערה': 'בדוק: Connect-ExchangeOnline; Get-OrganizationConfig | Select AuditDisabled', 'בקרות זמינות': allNames },
       };
     }
 
