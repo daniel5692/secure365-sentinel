@@ -1672,14 +1672,21 @@ Deno.serve(async (req) => {
         }
 
         if (role?.id) {
-          // Assign role (ignore 400 = already assigned)
-          await fetch(`https://graph.microsoft.com/v1.0/directoryRoles/${role.id}/members/$ref`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ '@odata.id': `https://graph.microsoft.com/v1.0/directoryObjects/${spId}` }),
+          // Check if SP is already a member before trying to add
+          const memberCheckRes = await fetch(`https://graph.microsoft.com/v1.0/directoryRoles/${role.id}/members?$filter=id eq '${spId}'&$select=id`, {
+            headers: { Authorization: `Bearer ${token}` },
           });
-          // Small delay to let the role propagate
-          await new Promise(r => setTimeout(r, 3000));
+          const memberCheckData = await memberCheckRes.json();
+          const alreadyMember = (memberCheckData.value || []).length > 0;
+          if (!alreadyMember) {
+            await fetch(`https://graph.microsoft.com/v1.0/directoryRoles/${role.id}/members/$ref`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ '@odata.id': `https://graph.microsoft.com/v1.0/directoryObjects/${spId}` }),
+            });
+            // Small delay to let the role propagate
+            await new Promise(r => setTimeout(r, 3000));
+          }
         }
       }
     } catch (_) { /* non-fatal */ }
