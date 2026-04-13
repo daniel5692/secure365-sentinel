@@ -27,6 +27,7 @@ export default function Scans() {
   const [starting, setStarting] = useState(false);
   const [deleting, setDeleting] = useState(new Set());
   const [deletingAll, setDeletingAll] = useState(false);
+  const [deleteAllProgress, setDeleteAllProgress] = useState(0);
 
   const connectedTenants = tenants.filter(t => t.connection_status === 'connected');
 
@@ -90,10 +91,16 @@ export default function Scans() {
     if (!confirm(`למחוק את כל ${filteredScans.length} הסריקות וכל הממצאים שלהן? פעולה זו אינה הפיכה.`)) return;
     const ids = filteredScans.map(s => s.id);
     setDeletingAll(true);
-    // Delete all in parallel
-    await Promise.all(ids.map(id => base44.functions.invoke('deleteScan', { scan_job_id: id })));
+    setDeleteAllProgress(0);
+    let done = 0;
+    await Promise.all(ids.map(async (id) => {
+      await base44.functions.invoke('deleteScan', { scan_job_id: id });
+      done++;
+      setDeleteAllProgress(Math.round((done / ids.length) * 100));
+    }));
     setScans(prev => prev.filter(s => !ids.includes(s.id)));
     setDeletingAll(false);
+    setDeleteAllProgress(0);
   };
 
   const filteredScans = selectedTenant === 'all'
@@ -172,10 +179,23 @@ export default function Scans() {
       {/* Scans List */}
       {filteredScans.length > 0 && (
         <div className="flex justify-end">
-          <Button variant="destructive" size="sm" className="gap-2" onClick={handleDeleteAll} disabled={deletingAll}>
-            {deletingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-            {deletingAll ? 'מוחק...' : `מחק את כל הסריקות (${filteredScans.length})`}
-          </Button>
+          <div className="flex items-center gap-3">
+            {deletingAll && (
+              <div className="flex items-center gap-2">
+                <div className="w-32 h-2 bg-secondary rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-red-500 rounded-full transition-all duration-300"
+                    style={{ width: `${deleteAllProgress}%` }}
+                  />
+                </div>
+                <span className="text-xs text-red-400 font-medium">{deleteAllProgress}%</span>
+              </div>
+            )}
+            <Button variant="destructive" size="sm" className="gap-2" onClick={handleDeleteAll} disabled={deletingAll}>
+              {deletingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              {deletingAll ? `מוחק... (${deleteAllProgress}%)` : `מחק את כל הסריקות (${filteredScans.length})`}
+            </Button>
+          </div>
         </div>
       )}
       {filteredScans.length === 0 ? (
@@ -191,8 +211,14 @@ export default function Scans() {
               ? moment(scan.completed_at).diff(moment(scan.started_at), 'minutes')
               : null;
             return (
-              <Link key={scan.id} to={`/findings?scan=${scan.id}`} className="block">
-                <div className="bg-card border border-border rounded-xl p-5 hover:border-primary/30 transition-all">
+              <Link key={scan.id} to={`/findings?scan=${scan.id}`} className={cn("block", deleting.has(scan.id) && "pointer-events-none")}>
+                <div className={cn("bg-card border border-border rounded-xl p-5 hover:border-primary/30 transition-all relative overflow-hidden", deleting.has(scan.id) && "opacity-60")}>
+                  {deleting.has(scan.id) && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-background/60 z-10 gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin text-red-400" />
+                      <span className="text-xs text-red-400 font-medium">מוחק ממצאים...</span>
+                    </div>
+                  )}
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center">
                       <Server className="w-5 h-5 text-muted-foreground" />
