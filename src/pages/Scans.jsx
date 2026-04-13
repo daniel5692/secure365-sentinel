@@ -25,19 +25,8 @@ export default function Scans() {
   const [selectedTenant, setSelectedTenant] = useState('all');
   const [scanTenant, setScanTenant] = useState('');
   const [starting, setStarting] = useState(false);
-
-  useEffect(() => {
-    if (!user) return;
-    Promise.all([
-      base44.entities.ScanJob.filter({ created_by: user.email }, '-created_date', 50),
-      base44.entities.ConnectedTenant.filter({ created_by: user.email }),
-    ]).then(([s, t]) => {
-      setScans(s);
-      setTenants(t);
-      if (t.length > 0) setScanTenant(t[0].id);
-      setLoading(false);
-    });
-  }, [user]);
+  const [deleting, setDeleting] = useState(new Set());
+  const [deletingAll, setDeletingAll] = useState(false);
 
   const connectedTenants = tenants.filter(t => t.connection_status === 'connected');
 
@@ -91,19 +80,20 @@ export default function Scans() {
     e.preventDefault();
     e.stopPropagation();
     if (!confirm('למחוק את הסריקה וכל הממצאים שלה?')) return;
+    setDeleting(prev => new Set([...prev, scanId]));
+    await base44.functions.invoke('deleteScan', { scan_job_id: scanId });
     setScans(prev => prev.filter(s => s.id !== scanId));
-    base44.functions.invoke('deleteScan', { scan_job_id: scanId });
+    setDeleting(prev => { const n = new Set(prev); n.delete(scanId); return n; });
   };
 
   const handleDeleteAll = async () => {
     if (!confirm(`למחוק את כל ${filteredScans.length} הסריקות וכל הממצאים שלהן? פעולה זו אינה הפיכה.`)) return;
     const ids = filteredScans.map(s => s.id);
-    // Remove from UI immediately
+    setDeletingAll(true);
+    // Delete all in parallel
+    await Promise.all(ids.map(id => base44.functions.invoke('deleteScan', { scan_job_id: id })));
     setScans(prev => prev.filter(s => !ids.includes(s.id)));
-    // Delete sequentially to avoid rate limiting
-    for (const id of ids) {
-      await base44.functions.invoke('deleteScan', { scan_job_id: id });
-    }
+    setDeletingAll(false);
   };
 
   const filteredScans = selectedTenant === 'all'
@@ -182,9 +172,9 @@ export default function Scans() {
       {/* Scans List */}
       {filteredScans.length > 0 && (
         <div className="flex justify-end">
-          <Button variant="destructive" size="sm" className="gap-2" onClick={handleDeleteAll}>
-            <Trash2 className="w-4 h-4" />
-            מחק את כל הסריקות ({filteredScans.length})
+          <Button variant="destructive" size="sm" className="gap-2" onClick={handleDeleteAll} disabled={deletingAll}>
+            {deletingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+            {deletingAll ? 'מוחק...' : `מחק את כל הסריקות (${filteredScans.length})`}
           </Button>
         </div>
       )}
@@ -269,10 +259,13 @@ export default function Scans() {
                       )}
                       <button
                         onClick={(e) => handleDeleteScan(e, scan.id)}
-                        className="p-2 rounded-lg hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors"
+                        disabled={deleting.has(scan.id)}
+                        className="p-2 rounded-lg hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors disabled:opacity-50"
                         title="מחק סריקה"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        {deleting.has(scan.id)
+                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          : <Trash2 className="w-4 h-4" />}
                       </button>
                     </div>
                   </div>

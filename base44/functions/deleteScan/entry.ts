@@ -25,22 +25,22 @@ Deno.serve(async (req) => {
   const { scan_job_id } = await req.json();
   if (!scan_job_id) return Response.json({ error: 'scan_job_id required' }, { status: 400 });
 
-  // Delete ScanJob first so UI updates immediately
-  await deleteWithRetry(base44.asServiceRole.entities.ScanJob, scan_job_id);
-
-  // Delete CheckResults in small batches with generous delays
+  // Delete ScanJob and CheckResults in parallel batches
   let deleted = 0;
+  let page = 0;
   while (true) {
-    const results = await base44.asServiceRole.entities.CheckResult.filter({ scan_job_id }, '-created_date', 25);
+    const results = await base44.asServiceRole.entities.CheckResult.filter({ scan_job_id }, '-created_date', 50);
     if (!results || results.length === 0) break;
-    for (const r of results) {
-      await deleteWithRetry(base44.asServiceRole.entities.CheckResult, r.id);
-      await sleep(500);
-    }
+    // Delete batch in parallel
+    await Promise.all(results.map(r => deleteWithRetry(base44.asServiceRole.entities.CheckResult, r.id)));
     deleted += results.length;
-    if (results.length < 25) break;
-    await sleep(1000);
+    if (results.length < 50) break;
+    page++;
+    await sleep(300);
   }
+
+  // Delete ScanJob after all results are gone
+  await deleteWithRetry(base44.asServiceRole.entities.ScanJob, scan_job_id);
 
   return Response.json({ success: true, deleted_results: deleted });
 });
