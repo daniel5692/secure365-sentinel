@@ -648,32 +648,57 @@ async function runCheck(token, checkId) {
 
     case 'CIS-3.4.1': {
       // Get-OrganizationConfig | Select AuditDisabled
-      // AuditDisabled = false means auditing is ON (this is the desired state)
+      // Use direct POST to Exchange API requesting AuditDisabled explicitly
       const orgId341 = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
-      const org341Raw = orgId341 && _exToken ? await exchangeGet(orgId341, 'Organization') : null;
-      // v2.0 API returns: { value: [ {...} ] } or { StartIndex, FieldNames, RowValues } (batch format)
-      // Try multiple response shapes
+      
+      let org341Raw = null;
+      if (orgId341 && _exToken) {
+        // Make a specific call requesting only AuditDisabled to ensure we get the field
+        const anchorMailbox341 = _tenantDomain
+          ? `APP:SystemMailbox{bb558c35-97f1-4cb9-8ff7-d53741dc928c}@${_tenantDomain}`
+          : `UPN:SystemMailbox{bb558c35-97f1-4cb9-8ff7-d53741dc928c}@${orgId341}.onmicrosoft.com`;
+        const res341 = await fetch(`https://outlook.office365.com/adminapi/v2.0/${orgId341}/OrganizationConfig`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${_exToken}`,
+            'Content-Type': 'application/json',
+            'X-AnchorMailbox': anchorMailbox341,
+          },
+          body: JSON.stringify({ CmdletInput: { CmdletName: 'Get-OrganizationConfig', Parameters: {} } }),
+        });
+        if (res341.ok) {
+          org341Raw = await res341.json();
+          console.log('CIS-3.4.1 raw response keys:', Object.keys(org341Raw || {}));
+          const firstItem = org341Raw?.value?.[0];
+          if (firstItem) console.log('CIS-3.4.1 AuditDisabled field:', firstItem.AuditDisabled, '| available fields sample:', Object.keys(firstItem).slice(0, 20).join(', '));
+        }
+      }
+
+      // Parse response - Exchange v2.0 may return value array or tabular format
       let orgData341 = null;
       if (org341Raw) {
         if (Array.isArray(org341Raw.value) && org341Raw.value.length > 0) {
           orgData341 = org341Raw.value[0];
-        } else if (org341Raw.AuditDisabled !== undefined) {
-          orgData341 = org341Raw;
         } else if (org341Raw.FieldNames && org341Raw.RowValues) {
-          // Tabular format: convert to object
           orgData341 = {};
           org341Raw.FieldNames.forEach((f, i) => { orgData341[f] = org341Raw.RowValues[0]?.[i]; });
+        } else if (org341Raw.AuditDisabled !== undefined) {
+          orgData341 = org341Raw;
         }
       }
+
       if (orgData341 !== null && orgData341 !== undefined) {
-        // AuditDisabled defaults to false in Exchange — if property is absent, treat as false (auditing enabled)
+        // If AuditDisabled field is present, use it. If absent, Exchange defaults it to false (auditing enabled).
+        // When explicitly set to true (disabled), Exchange WILL include it in the response.
         const auditDisabled = orgData341.AuditDisabled === true;
+        const fieldPresent = 'AuditDisabled' in orgData341;
         return {
           status: auditDisabled === false ? 'passed' : 'failed',
-          actual_value: `AuditDisabled: ${auditDisabled}`,
+          actual_value: `AuditDisabled: ${auditDisabled}${!fieldPresent ? ' (field absent = default false)' : ''}`,
           expected_value: 'AuditDisabled = false (תיעוד מופעל)',
           evidence: {
             'AuditDisabled': auditDisabled,
+            'שדה בתגובה': fieldPresent ? 'כן' : 'לא (ברירת מחדל = false)',
             'מקור': 'Exchange Admin REST API v2.0 (Get-OrganizationConfig)',
             'מצב': auditDisabled === false ? 'Mailbox Auditing מופעל ✓' : 'Mailbox Auditing מושבת ✗',
           },
@@ -681,12 +706,11 @@ async function runCheck(token, checkId) {
       }
       return {
         status: 'warning',
-        actual_value: _exToken ? 'Exchange API נגיש אך תגובה לא צפויה' : 'Exchange token לא התקבל — ודא Exchange.ManageAsAppV2 מוגדר',
+        actual_value: _exToken ? 'Exchange API נגיש אך תגובה לא צפויה' : 'Exchange token לא התקבל',
         expected_value: 'AuditDisabled = false',
         evidence: {
           'Exchange Token': _exToken ? 'קיים ✓' : 'חסר ✗',
           'Tenant Domain': _tenantDomain || 'לא נמצא',
-          'הערה': 'ודא Exchange.ManageAsAppV2 ב-App Registration וש-Service Principal קיבל תפקיד Exchange Administrator',
         },
       };
     }
