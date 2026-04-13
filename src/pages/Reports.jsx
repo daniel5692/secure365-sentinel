@@ -9,9 +9,54 @@ import SeverityBadge from "@/components/shared/SeverityBadge";
 import StatusBadge from "@/components/shared/StatusBadge";
 import { base44 } from "@/api/base44Client";
 
+function ReportSummary({ summary }) {
+  if (!summary) return null;
+  const cleaned = summary
+    .replace(/^#+\s*/gm, '')
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/__(.+?)__/g, '$1')
+    .replace(/\*(.+?)\*/g, '$1')
+    .replace(/^-+$/gm, '')
+    .split('\n')
+    .filter(line => line.trim())
+    .join('\n');
+
+  return (
+    <div className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap font-heebo bg-card rounded-lg p-5 border border-border">
+      {cleaned}
+    </div>
+  );
+}
+
+function ReportFindingDetail({ result }) {
+  return (
+    <div className="p-5 bg-secondary/10 border-t border-border space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="rounded-lg p-4 border bg-red-500/5 border-red-500/20">
+          <div className="text-[10px] font-semibold text-muted-foreground mb-1">ערך נוכחי</div>
+          <p className="text-xs text-red-400 break-all font-mono">{result.actual_value || '—'}</p>
+        </div>
+        <div className="rounded-lg p-4 border bg-green-500/5 border-green-500/20">
+          <div className="text-[10px] font-semibold text-muted-foreground mb-1">ערך מצופה</div>
+          <p className="text-xs text-green-400 break-all font-mono">{result.expected_value || '—'}</p>
+        </div>
+      </div>
+      {result.evidence && (
+        <div>
+          <div className="text-xs font-semibold text-foreground mb-2">עדויות</div>
+          <div className="bg-secondary/30 rounded-lg p-3 border border-border">
+            <p className="text-xs text-muted-foreground break-all font-mono">{result.evidence?.substring(0, 200)}</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ReportResultsTable({ scanJobId }) {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState(null);
 
   useEffect(() => {
     const load = async () => {
@@ -30,28 +75,38 @@ function ReportResultsTable({ scanJobId }) {
       <div className="bg-card border border-border rounded-lg overflow-hidden">
         <div className="grid grid-cols-12 gap-3 p-3 bg-secondary/30 text-xs font-semibold text-muted-foreground border-b border-border">
           <div className="col-span-1">מזהה</div>
-          <div className="col-span-5">בדיקה</div>
+          <div className="col-span-4">בדיקה</div>
           <div className="col-span-2">חומרה</div>
           <div className="col-span-2">סטטוס</div>
           <div className="col-span-2">תוצאה</div>
+          <div className="col-span-1"></div>
         </div>
-        <div className="divide-y divide-border max-h-96 overflow-y-auto">
+        <div className="divide-y divide-border">
           {results.map(r => (
-            <div key={r.id} className="grid grid-cols-12 gap-3 p-3 items-center hover:bg-secondary/20 transition-colors text-xs">
-              <div className="col-span-1"><code className="text-primary text-[10px]">{r.check_id}</code></div>
-              <div className="col-span-5"><span className="text-foreground">{r.check_title}</span></div>
-              <div className="col-span-2"><SeverityBadge severity={r.severity} size="sm" /></div>
-              <div className="col-span-2"><StatusBadge status={r.status} size="sm" /></div>
-              <div className="col-span-2">
-                <span className={cn(
-                  "text-[10px] font-medium",
-                  r.status === 'passed' ? 'text-green-400' :
-                  r.status === 'failed' ? 'text-red-400' :
-                  r.status === 'warning' ? 'text-amber-400' : 'text-blue-400'
-                )}>
-                  {r.actual_value?.substring(0, 20) || '—'}
-                </span>
+            <div key={r.id}>
+              <div
+                className="grid grid-cols-12 gap-3 p-3 items-center hover:bg-secondary/20 transition-colors text-xs cursor-pointer"
+                onClick={() => setExpandedId(expandedId === r.id ? null : r.id)}
+              >
+                <div className="col-span-1"><code className="text-primary text-[10px]">{r.check_id}</code></div>
+                <div className="col-span-4"><span className="text-foreground">{r.check_title}</span></div>
+                <div className="col-span-2"><SeverityBadge severity={r.severity} size="sm" /></div>
+                <div className="col-span-2"><StatusBadge status={r.status} size="sm" /></div>
+                <div className="col-span-2">
+                  <span className={cn(
+                    "text-[10px] font-medium",
+                    r.status === 'passed' ? 'text-green-400' :
+                    r.status === 'failed' ? 'text-red-400' :
+                    r.status === 'warning' ? 'text-amber-400' : 'text-blue-400'
+                  )}>
+                    {r.actual_value?.substring(0, 15) || '—'}
+                  </span>
+                </div>
+                <div className="col-span-1 flex justify-end">
+                  <ChevronLeft className={cn("w-4 h-4 text-muted-foreground transition-transform", expandedId === r.id && '-rotate-90')} />
+                </div>
               </div>
+              {expandedId === r.id && <ReportFindingDetail result={r} />}
             </div>
           ))}
         </div>
@@ -113,7 +168,6 @@ export default function Reports() {
     setGenerating(true);
     setShowCreate(false);
 
-    // Fetch check results for this scan
     const results = await base44.entities.CheckResult.filter({ scan_job_id: scan.id });
     const failed = results.filter(r => r.status === 'failed');
     const passed = results.filter(r => r.status === 'passed');
@@ -170,7 +224,6 @@ export default function Reports() {
   };
 
   const handleExportHtml = async (report) => {
-    const scan = scans.find(s => s.id === report.scan_job_id);
     const results = await base44.entities.CheckResult.filter({ scan_job_id: report.scan_job_id });
     
     const html = `
@@ -278,7 +331,6 @@ export default function Reports() {
     const results = await base44.entities.CheckResult.filter({ scan_job_id: report.scan_job_id });
     const doc = new jsPDF({ compress: true });
     
-    // Set up RTL
     doc.setFont('Heebo');
     doc.setFontSize(18);
     doc.text(report.title || 'דוח אבטחה', 20, 15, { align: 'right' });
@@ -318,7 +370,6 @@ export default function Reports() {
       y += lines.length * 4 + 5;
     }
     
-    // Add new page for results if needed
     if (y > 250) {
       doc.addPage();
       y = 15;
@@ -328,7 +379,6 @@ export default function Reports() {
     doc.text('תוצאות הבדיקות', 20, y, { align: 'right' });
     y += 8;
     
-    // Simple table using text
     doc.setFontSize(8);
     results.slice(0, 50).forEach(r => {
       if (y > 270) { doc.addPage(); y = 15; }
@@ -430,7 +480,6 @@ export default function Reports() {
         </div>
       )}
 
-      {/* Templates */}
       {scans.length > 0 && (
         <div className="bg-card border border-border rounded-xl p-6">
           <h3 className="text-sm font-semibold text-foreground mb-4">תבניות דוח זמינות</h3>
@@ -451,7 +500,6 @@ export default function Reports() {
         </div>
       )}
 
-      {/* Create Dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent dir="rtl">
           <DialogHeader>
@@ -490,74 +538,67 @@ export default function Reports() {
         </DialogContent>
       </Dialog>
 
-      {/* View Report Dialog */}
-       {viewReport && (
-         <Dialog open={!!viewReport} onOpenChange={() => setViewReport(null)}>
-           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" dir="rtl">
-             <DialogHeader>
-               <div className="flex items-center justify-between gap-4 mb-2">
-                 <div className="flex-1">
-                   <DialogTitle className="text-xl">{viewReport.title}</DialogTitle>
-                   <div className="flex items-center gap-4 text-xs text-muted-foreground mt-2">
-                     <span>{viewReport.tenant_name}</span>
-                     <span>•</span>
-                     <span>{viewReport.scan_date ? new Date(viewReport.scan_date).toLocaleDateString('he-IL') : ''}</span>
-                     <span>•</span>
-                     <span>{viewReport.benchmark_version}</span>
-                   </div>
-                 </div>
-                 <ScoreRing score={viewReport.overall_score || 0} size={100} />
-               </div>
-             </DialogHeader>
-             <div className="mt-6 space-y-6">
-               {/* Statistics Grid */}
-               <div className="grid grid-cols-4 gap-3">
-                 <div className="bg-secondary/30 rounded-lg p-4 border border-border text-center">
-                   <div className="text-2xl font-bold text-green-400">{viewReport.passed_count || 0}</div>
-                   <div className="text-xs text-muted-foreground mt-1">עברו</div>
-                 </div>
-                 <div className="bg-secondary/30 rounded-lg p-4 border border-border text-center">
-                   <div className="text-2xl font-bold text-red-400">{viewReport.failed_count || 0}</div>
-                   <div className="text-xs text-muted-foreground mt-1">נכשלו</div>
-                 </div>
-                 <div className="bg-secondary/30 rounded-lg p-4 border border-border text-center">
-                   <div className="text-2xl font-bold text-red-400">{viewReport.findings_by_severity?.critical || 0}</div>
-                   <div className="text-xs text-muted-foreground mt-1">קריטיים</div>
-                 </div>
-                 <div className="bg-secondary/30 rounded-lg p-4 border border-border text-center">
-                   <div className="text-2xl font-bold text-foreground">{viewReport.total_findings || 0}</div>
-                   <div className="text-xs text-muted-foreground mt-1">סה"כ בדיקות</div>
-                 </div>
-               </div>
+      {viewReport && (
+        <Dialog open={!!viewReport} onOpenChange={() => setViewReport(null)}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" dir="rtl">
+            <DialogHeader>
+              <div className="flex items-center justify-between gap-4 mb-2">
+                <div className="flex-1">
+                  <DialogTitle className="text-xl">{viewReport.title}</DialogTitle>
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground mt-2">
+                    <span>{viewReport.tenant_name}</span>
+                    <span>•</span>
+                    <span>{viewReport.scan_date ? new Date(viewReport.scan_date).toLocaleDateString('he-IL') : ''}</span>
+                    <span>•</span>
+                    <span>{viewReport.benchmark_version}</span>
+                  </div>
+                </div>
+                <ScoreRing score={viewReport.overall_score || 0} size={100} />
+              </div>
+            </DialogHeader>
+            <div className="mt-6 space-y-6">
+              <div className="grid grid-cols-4 gap-3">
+                <div className="bg-secondary/30 rounded-lg p-4 border border-border text-center">
+                  <div className="text-2xl font-bold text-green-400">{viewReport.passed_count || 0}</div>
+                  <div className="text-xs text-muted-foreground mt-1">עברו</div>
+                </div>
+                <div className="bg-secondary/30 rounded-lg p-4 border border-border text-center">
+                  <div className="text-2xl font-bold text-red-400">{viewReport.failed_count || 0}</div>
+                  <div className="text-xs text-muted-foreground mt-1">נכשלו</div>
+                </div>
+                <div className="bg-secondary/30 rounded-lg p-4 border border-border text-center">
+                  <div className="text-2xl font-bold text-red-400">{viewReport.findings_by_severity?.critical || 0}</div>
+                  <div className="text-xs text-muted-foreground mt-1">קריטיים</div>
+                </div>
+                <div className="bg-secondary/30 rounded-lg p-4 border border-border text-center">
+                  <div className="text-2xl font-bold text-foreground">{viewReport.total_findings || 0}</div>
+                  <div className="text-xs text-muted-foreground mt-1">סה"כ בדיקות</div>
+                </div>
+              </div>
 
-               {/* Summary */}
-               {viewReport.summary_he && (
-                 <div>
-                   <h3 className="text-sm font-semibold text-foreground mb-3">סיכום הדוח</h3>
-                   <div className="text-sm text-muted-foreground leading-relaxed bg-secondary/20 rounded-lg p-4 whitespace-pre-wrap font-heebo">
-                     {viewReport.summary_he}
-                   </div>
-                 </div>
-               )}
+              {viewReport.summary_he && (
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground mb-3">סיכום הדוח</h3>
+                  <ReportSummary summary={viewReport.summary_he} />
+                </div>
+              )}
 
-               {/* Results Table */}
-               {viewReport.scan_job_id && (
-                 <ReportResultsTable scanJobId={viewReport.scan_job_id} />
-               )}
+              {viewReport.scan_job_id && (
+                <ReportResultsTable scanJobId={viewReport.scan_job_id} />
+              )}
 
-               {/* Export Buttons */}
-               <div className="flex gap-2 pt-4 border-t border-border">
-                 <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleExportPdf(viewReport)}>
-                   <Download className="w-4 h-4" />ייצא PDF
-                 </Button>
-                 <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleExportHtml(viewReport)}>
-                   <Download className="w-4 h-4" />ייצא HTML
-                 </Button>
-               </div>
-             </div>
-           </DialogContent>
-         </Dialog>
-       )}
+              <div className="flex gap-2 pt-4 border-t border-border">
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleExportPdf(viewReport)}>
+                  <Download className="w-4 h-4" />ייצא PDF
+                </Button>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleExportHtml(viewReport)}>
+                  <Download className="w-4 h-4" />ייצא HTML
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
