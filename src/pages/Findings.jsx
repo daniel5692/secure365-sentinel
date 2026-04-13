@@ -22,6 +22,7 @@ export default function Findings() {
   const [domainFilter, setDomainFilter] = useState('all');
   const [expandedFinding, setExpandedFinding] = useState(null);
   const [resultsLoading, setResultsLoading] = useState(false);
+  const [currentScanScore, setCurrentScanScore] = useState(null);
 
   const handleOverrideChange = useCallback((updatedFinding) => {
     setResults(prev => prev.map(r => r.id === updatedFinding.id ? { ...r, ...updatedFinding } : r));
@@ -30,7 +31,7 @@ export default function Findings() {
   // Read scan param from URL
   const urlParams = new URLSearchParams(window.location.search);
   const urlScanId = urlParams.get('scan');
-  const [selectedScan, setSelectedScan] = useState(urlScanId || 'all');
+  const [selectedScan, setSelectedScan] = useState(null);
 
   const loadResultsForScan = async (scanId, allScans) => {
     if (!scanId || scanId === 'all') {
@@ -51,7 +52,10 @@ export default function Findings() {
       const completedScans = allScans.filter(sc => sc.status === 'completed');
       setScans(completedScans);
       if (completedScans.length === 0) { setLoading(false); return; }
-      await loadResultsForScan(urlScanId || 'all', completedScans);
+      const targetScan = urlScanId || completedScans[0]?.id;
+      setSelectedScan(targetScan);
+      setCurrentScanScore(completedScans[0]?.overall_score);
+      await loadResultsForScan(targetScan, completedScans);
       setLoading(false);
     });
   }, []);
@@ -88,12 +92,13 @@ export default function Findings() {
             {loading ? 'טוען...' : `${filtered.length} ממצאים${selectedScan !== 'all' ? ` בסריקה זו` : ' בסך הכל'}`}
           </p>
         </div>
-        <Select value={selectedScan} onValueChange={async (val) => {
+        <Select value={selectedScan || ''} onValueChange={async (val) => {
           setSelectedScan(val);
           setResultsLoading(true);
-          const targetId = val === 'all' ? scans[0]?.id : val;
-          if (targetId) {
-            const res = await base44.functions.invoke('getCheckResults', { scan_job_ids: [targetId] });
+          const targetScan = scans.find(s => s.id === val);
+          setCurrentScanScore(targetScan?.overall_score);
+          if (val) {
+            const res = await base44.functions.invoke('getCheckResults', { scan_job_ids: [val] });
             setResults(res.data?.results || []);
           }
           setResultsLoading(false);
@@ -102,15 +107,27 @@ export default function Findings() {
             <SelectValue placeholder="בחר סריקה" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">כל הסריקות</SelectItem>
             {scans.map(s => (
               <SelectItem key={s.id} value={s.id}>
-                {s.tenant_name} — {s.created_date ? new Date(s.created_date).toLocaleDateString('he-IL') : ''}
+                {s.tenant_name} — {s.created_date ? new Date(s.created_date).toLocaleString('he-IL', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
+
+      {currentScanScore != null && (
+        <div className="flex items-center gap-3 px-4 py-3 bg-secondary/30 rounded-xl border border-border/50">
+          <span className="text-xs font-semibold text-muted-foreground">ציון הסריקה:</span>
+          <div className={`px-3 py-1 rounded-lg text-sm font-bold ${
+            currentScanScore >= 80 ? 'bg-green-500/10 text-green-400' :
+            currentScanScore >= 60 ? 'bg-amber-500/10 text-amber-400' :
+            'bg-red-500/10 text-red-400'
+          }`}>
+            {currentScanScore}%
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[200px] max-w-sm">
