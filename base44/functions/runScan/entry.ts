@@ -665,8 +665,9 @@ async function runCheck(token, checkId) {
           org341Raw.FieldNames.forEach((f, i) => { orgData341[f] = org341Raw.RowValues[0]?.[i]; });
         }
       }
-      if (orgData341 !== null && orgData341 !== undefined && orgData341.AuditDisabled !== undefined) {
-        const auditDisabled = orgData341.AuditDisabled;
+      if (orgData341 !== null && orgData341 !== undefined) {
+        // AuditDisabled defaults to false in Exchange — if property is absent, treat as false (auditing enabled)
+        const auditDisabled = orgData341.AuditDisabled === true;
         return {
           status: auditDisabled === false ? 'passed' : 'failed',
           actual_value: `AuditDisabled: ${auditDisabled}`,
@@ -678,19 +679,13 @@ async function runCheck(token, checkId) {
           },
         };
       }
-      // Log what we actually got for debugging
-      const debugInfo = org341Raw ? JSON.stringify(org341Raw).substring(0, 300) : 'null response';
-      console.error('CIS-3.4.1: Unexpected Exchange API response:', debugInfo);
       return {
         status: 'warning',
-        actual_value: _exToken
-          ? `Exchange API נגיש אך תגובה לא צפויה. Raw: ${debugInfo.substring(0, 100)}`
-          : 'Exchange token לא התקבל — ודא Exchange.ManageAsAppV2 מוגדר',
+        actual_value: _exToken ? 'Exchange API נגיש אך תגובה לא צפויה' : 'Exchange token לא התקבל — ודא Exchange.ManageAsAppV2 מוגדר',
         expected_value: 'AuditDisabled = false',
         evidence: {
           'Exchange Token': _exToken ? 'קיים ✓' : 'חסר ✗',
           'Tenant Domain': _tenantDomain || 'לא נמצא',
-          'Raw Response (300 chars)': debugInfo,
           'הערה': 'ודא Exchange.ManageAsAppV2 ב-App Registration וש-Service Principal קיבל תפקיד Exchange Administrator',
         },
       };
