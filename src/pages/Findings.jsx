@@ -7,6 +7,7 @@ import SeverityBadge from "@/components/shared/SeverityBadge";
 import StatusBadge from "@/components/shared/StatusBadge";
 import FindingDetail from "@/components/findings/FindingDetail";
 import QuickOverrideMenu from "@/components/findings/QuickOverrideMenu";
+import ScoreRing from "@/components/shared/ScoreRing";
 import { base44 } from "@/api/base44Client";
 import { getAllChecks } from "@/lib/security-checks";
 
@@ -117,14 +118,18 @@ export default function Findings() {
       </div>
 
       {currentScanScore != null && (
-        <div className="flex items-center gap-3 px-4 py-3 bg-secondary/30 rounded-xl border border-border/50">
-          <span className="text-xs font-semibold text-muted-foreground">ציון הסריקה:</span>
-          <div className={`px-3 py-1 rounded-lg text-sm font-bold ${
-            currentScanScore >= 80 ? 'bg-green-500/10 text-green-400' :
-            currentScanScore >= 60 ? 'bg-amber-500/10 text-amber-400' :
-            'bg-red-500/10 text-red-400'
-          }`}>
-            {currentScanScore}%
+        <div className="flex items-center justify-center py-6 px-6 bg-card border border-border rounded-xl">
+          <div className="flex items-center gap-8">
+            <ScoreRing score={currentScanScore} size={160} />
+            <div>
+              <h3 className="text-sm font-semibold text-muted-foreground mb-2">ציון הסריקה הנוכחי</h3>
+              <p className="text-2xl font-bold text-foreground">{currentScanScore}%</p>
+              <p className="text-xs text-muted-foreground mt-2">
+                {currentScanScore >= 80 ? '✓ עומד בדרישות' :
+                 currentScanScore >= 60 ? '⚠ דרוש שיפור' :
+                 '✗ דרוש התערבות'}
+              </p>
+            </div>
           </div>
         </div>
       )}
