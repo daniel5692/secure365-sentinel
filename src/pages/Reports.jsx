@@ -226,6 +226,35 @@ export default function Reports() {
   const handleExportHtml = async (report) => {
     const results = await base44.entities.CheckResult.filter({ scan_job_id: report.scan_job_id });
     
+    const summaryHtml = report.summary_he ? `
+    <div class="summary-section">
+      <div class="summary-title">סיכום הדוח</div>
+      <div class="summary-text">${(report.summary_he || '').replace(/\n/g, '<br>')}</div>
+    </div>
+    ` : '';
+
+    const resultsHtml = results.map(r => {
+      const evidenceHtml = r.evidence ? `<div class="detail-box"><div class="detail-label">עדויות</div><div class="detail-value">${r.evidence?.substring(0, 300) || '—'}</div></div>` : '';
+      return `
+      <div class="result-item" onclick="document.getElementById('detail-${r.id}').classList.toggle('open')">
+        <div class="result-header">
+          <div class="result-id">${r.check_id}</div>
+          <div class="result-title">${r.check_title}</div>
+          <div class="result-domain">${r.domain || '—'}</div>
+          <div><span class="badge badge-${r.severity}">${SEVERITY_CONFIG[r.severity]?.label || r.severity}</span></div>
+          <div><span class="badge badge-${r.status}">${STATUS_CONFIG[r.status]?.label || r.status}</span></div>
+        </div>
+        <div id="detail-${r.id}" class="result-detail">
+          <div class="detail-grid">
+            <div class="detail-box failed"><div class="detail-label">ערך נוכחי</div><div class="detail-value error">${r.actual_value || '—'}</div></div>
+            <div class="detail-box passed"><div class="detail-label">ערך מצופה</div><div class="detail-value success">${r.expected_value || '—'}</div></div>
+          </div>
+          ${evidenceHtml}
+        </div>
+      </div>
+      `;
+    }).join('');
+    
     const html = `
 <!DOCTYPE html>
 <html dir="rtl" lang="he">
@@ -234,85 +263,83 @@ export default function Reports() {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${report.title}</title>
   <style>
-    body { font-family: 'Heebo', sans-serif; background: #0f1419; color: #e4e9f1; line-height: 1.6; margin: 0; padding: 20px; }
-    .container { max-width: 1000px; margin: 0 auto; }
-    .header { border-bottom: 2px solid #3d8ff7; padding-bottom: 20px; margin-bottom: 30px; }
-    h1 { margin: 0; font-size: 28px; }
-    .meta { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-top: 15px; font-size: 13px; color: #9ca3af; }
-    .meta div { display: flex; justify-content: space-between; }
-    .score-section { display: flex; align-items: center; gap: 30px; margin-bottom: 40px; padding: 20px; background: #1a2332; border: 1px solid #364455; border-radius: 8px; }
-    .score-ring { text-align: center; }
-    .score-value { font-size: 48px; font-weight: bold; color: #3d8ff7; }
-    .score-label { font-size: 12px; color: #9ca3af; margin-top: 5px; }
-    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 30px; }
-    .stat { background: #1a2332; border: 1px solid #364455; border-radius: 8px; padding: 15px; text-align: center; }
-    .stat-value { font-size: 20px; font-weight: bold; }
-    .stat-label { font-size: 11px; color: #9ca3af; margin-top: 5px; }
-    .results-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-    .results-table thead { background: #1a2332; border-bottom: 2px solid #364455; }
-    .results-table th { padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: #9ca3af; }
-    .results-table td { padding: 12px; border-bottom: 1px solid #364455; font-size: 12px; }
-    .results-table tr:hover { background: #242f3d; }
-    .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; border: 1px solid; }
-    .badge-passed { color: #22c55e; background: #16a34a20; border-color: #16a34a; }
-    .badge-failed { color: #ef4444; background: #dc262620; border-color: #dc2626; }
-    .badge-warning { color: #f59e0b; background: #d9710020; border-color: #d97100; }
-    .badge-critical { color: #ef4444; background: #dc262620; border-color: #dc2626; }
-    .badge-high { color: #f97316; background: #ea580c20; border-color: #ea580c; }
-    .badge-medium { color: #eab308; background: #ca8a0420; border-color: #ca8a04; }
-    .badge-low { color: #3b82f6; background: #1d4ed820; border-color: #1d4ed8; }
-    .section { margin-top: 40px; }
-    .section-title { font-size: 18px; font-weight: 600; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #364455; }
-    .summary { background: #1a2332; padding: 20px; border-radius: 8px; border: 1px solid #364455; line-height: 1.8; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Heebo', -apple-system, BlinkMacSystemFont, sans-serif; background: #0f1419; color: #e4e9f1; line-height: 1.6; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 40px 20px; }
+    .header { margin-bottom: 50px; }
+    .header h1 { font-size: 36px; font-weight: 700; margin-bottom: 15px; background: linear-gradient(135deg, #3d8ff7 0%, #60a5fa 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .header-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-top: 20px; }
+    .meta-item { padding: 12px 0; border-bottom: 1px solid #1e293b; }
+    .meta-label { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+    .meta-value { font-size: 16px; font-weight: 600; color: #e4e9f1; }
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 50px; }
+    .stat-card { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 1px solid #1e293b; border-radius: 12px; padding: 20px; text-align: center; transition: all 0.3s; }
+    .stat-card:hover { border-color: #3d8ff7; transform: translateY(-2px); box-shadow: 0 8px 16px rgba(61, 143, 247, 0.1); }
+    .stat-value { font-size: 32px; font-weight: 700; margin-bottom: 8px; }
+    .stat-label { font-size: 13px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
+    .summary-section { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 1px solid #1e293b; border-radius: 12px; padding: 30px; margin-bottom: 40px; line-height: 1.8; }
+    .summary-title { font-size: 14px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 15px; font-weight: 600; }
+    .summary-text { font-size: 15px; color: #cbd5e1; }
+    .results-section h2 { font-size: 20px; font-weight: 700; margin-bottom: 20px; color: #e4e9f1; }
+    .result-item { background: #1e293b; border: 1px solid #1e293b; border-radius: 8px; margin-bottom: 12px; cursor: pointer; transition: all 0.2s; }
+    .result-item:hover { border-color: #3d8ff7; background: #0f172a; }
+    .result-header { display: grid; grid-template-columns: 80px 1fr 120px 120px 100px; gap: 15px; padding: 15px 20px; align-items: center; }
+    .result-id { font-family: 'Monaco', 'Courier', monospace; font-size: 12px; color: #3d8ff7; font-weight: 600; }
+    .result-title { font-size: 14px; font-weight: 500; color: #e4e9f1; }
+    .result-domain { font-size: 12px; color: #94a3b8; }
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; border: 1px solid; }
+    .badge-passed { color: #22c55e; background: rgba(34, 197, 94, 0.1); border-color: rgba(34, 197, 94, 0.3); }
+    .badge-failed { color: #ef4444; background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3); }
+    .badge-warning { color: #f59e0b; background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.3); }
+    .badge-critical { color: #ef4444; background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3); }
+    .badge-high { color: #f97316; background: rgba(249, 115, 22, 0.1); border-color: rgba(249, 115, 22, 0.3); }
+    .badge-medium { color: #eab308; background: rgba(234, 179, 8, 0.1); border-color: rgba(234, 179, 8, 0.3); }
+    .badge-low { color: #3b82f6; background: rgba(59, 130, 246, 0.1); border-color: rgba(59, 130, 246, 0.3); }
+    .result-detail { display: none; padding: 20px; border-top: 1px solid #0f172a; background: #0f172a; }
+    .result-detail.open { display: block; }
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+    .detail-box { background: #1e293b; border: 1px solid #1e293b; border-radius: 8px; padding: 15px; }
+    .detail-box.passed { border-color: rgba(34, 197, 94, 0.3); }
+    .detail-box.failed { border-color: rgba(239, 68, 68, 0.3); }
+    .detail-label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .detail-value { font-family: 'Monaco', 'Courier', monospace; font-size: 12px; color: #cbd5e1; word-break: break-all; }
+    .detail-value.success { color: #22c55e; }
+    .detail-value.error { color: #ef4444; }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
       <h1>${report.title}</h1>
-      <div class="meta">
-        <div><span>טננט:</span><strong>${report.tenant_name}</strong></div>
-        <div><span>תאריך סריקה:</span><strong>${new Date(report.scan_date).toLocaleDateString('he-IL')}</strong></div>
-        <div><span>גרסה:</span><strong>${report.benchmark_version}</strong></div>
+      <div class="header-meta">
+        <div class="meta-item"><div class="meta-label">טננט</div><div class="meta-value">${report.tenant_name}</div></div>
+        <div class="meta-item"><div class="meta-label">תאריך</div><div class="meta-value">${new Date(report.scan_date).toLocaleDateString('he-IL')}</div></div>
+        <div class="meta-item"><div class="meta-label">בנצ'מארק</div><div class="meta-value">${report.benchmark_version}</div></div>
       </div>
     </div>
-    
-    <div class="score-section">
-      <div class="score-ring">
-        <div class="score-value">${report.overall_score}</div>
-        <div class="score-label">ציון כללי</div>
-      </div>
-      <div class="stats">
-        <div class="stat"><div class="stat-value" style="color: #22c55e;">${report.passed_count || 0}</div><div class="stat-label">עברו</div></div>
-        <div class="stat"><div class="stat-value" style="color: #ef4444;">${report.failed_count || 0}</div><div class="stat-label">נכשלו</div></div>
-        <div class="stat"><div class="stat-value" style="color: #ef4444;">${report.findings_by_severity?.critical || 0}</div><div class="stat-label">קריטיים</div></div>
-        <div class="stat"><div class="stat-value">${report.total_findings || 0}</div><div class="stat-label">סה"כ בדיקות</div></div>
-      </div>
+
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-value" style="color: #22c55e;">${report.overall_score}</div><div class="stat-label">ציון כללי</div></div>
+      <div class="stat-card"><div class="stat-value" style="color: #22c55e;">${report.passed_count || 0}</div><div class="stat-label">עברו</div></div>
+      <div class="stat-card"><div class="stat-value" style="color: #ef4444;">${report.failed_count || 0}</div><div class="stat-label">נכשלו</div></div>
+      <div class="stat-card"><div class="stat-value" style="color: #ef4444;">${report.findings_by_severity?.critical || 0}</div><div class="stat-label">קריטיים</div></div>
     </div>
-    
-    <div class="section">
-      <div class="section-title">סיכום הדוח</div>
-      <div class="summary">${(report.summary_he || '').replace(/\n/g, '<br>')}</div>
-    </div>
-    
-    <div class="section">
-      <div class="section-title">תוצאות הבדיקות</div>
-      <table class="results-table">
-        <thead><tr><th>מזהה</th><th>בדיקה</th><th>תחום</th><th>חומרה</th><th>סטטוס</th></tr></thead>
-        <tbody>
-          ${results.map(r => `
-          <tr>
-            <td><code>${r.check_id}</code></td>
-            <td>${r.check_title}</td>
-            <td>${r.domain}</td>
-            <td><span class="badge badge-${r.severity}">${SEVERITY_CONFIG[r.severity]?.label || r.severity}</span></td>
-            <td><span class="badge badge-${r.status}">${STATUS_CONFIG[r.status]?.label || r.status}</span></td>
-          </tr>
-          `).join('')}
-        </tbody>
-      </table>
+
+    ${summaryHtml}
+
+    <div class="results-section">
+      <h2>פרטי הבדיקות</h2>
+      ${resultsHtml}
     </div>
   </div>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const items = document.querySelectorAll('.result-item');
+      items.forEach(item => {
+        item.style.cursor = 'pointer';
+      });
+    });
+  </script>
 </body>
 </html>
     `.trim();
@@ -324,70 +351,6 @@ export default function Reports() {
     a.download = `${report.title || 'report'}.html`;
     a.click();
     URL.revokeObjectURL(url);
-  };
-
-  const handleExportPdf = async (report) => {
-    const { jsPDF } = await import('jspdf');
-    const results = await base44.entities.CheckResult.filter({ scan_job_id: report.scan_job_id });
-    const doc = new jsPDF({ compress: true });
-    
-    doc.setFont('Heebo');
-    doc.setFontSize(18);
-    doc.text(report.title || 'דוח אבטחה', 20, 15, { align: 'right' });
-    
-    doc.setFontSize(10);
-    let y = 25;
-    const metadata = [
-      `טננט: ${report.tenant_name}`,
-      `תאריך: ${report.scan_date ? new Date(report.scan_date).toLocaleDateString('he-IL') : ''}`,
-      `ציון כללי: ${report.overall_score}/100`,
-      `בנצ'מארק: ${report.benchmark_version}`,
-    ];
-    
-    metadata.forEach(text => {
-      doc.text(text, 20, y, { align: 'right' });
-      y += 5;
-    });
-    
-    y += 5;
-    doc.setFontSize(12);
-    doc.text('סטטיסטיקה', 20, y, { align: 'right' });
-    y += 8;
-    
-    doc.setFontSize(9);
-    const stats = `עברו: ${report.passed_count || 0} | נכשלו: ${report.failed_count || 0} | קריטיים: ${report.findings_by_severity?.critical || 0} | סה"כ: ${report.total_findings || 0}`;
-    doc.text(stats, 20, y, { align: 'right' });
-    
-    y += 10;
-    doc.setFontSize(12);
-    doc.text('סיכום', 20, y, { align: 'right' });
-    y += 8;
-    
-    if (report.summary_he) {
-      doc.setFontSize(9);
-      const lines = doc.splitTextToSize(report.summary_he, 170);
-      doc.text(lines, 20, y, { align: 'right', maxWidth: 170 });
-      y += lines.length * 4 + 5;
-    }
-    
-    if (y > 250) {
-      doc.addPage();
-      y = 15;
-    }
-    
-    doc.setFontSize(12);
-    doc.text('תוצאות הבדיקות', 20, y, { align: 'right' });
-    y += 8;
-    
-    doc.setFontSize(8);
-    results.slice(0, 50).forEach(r => {
-      if (y > 270) { doc.addPage(); y = 15; }
-      const text = `${r.check_id} | ${r.check_title.substring(0, 30)} | ${r.status}`;
-      doc.text(text, 20, y, { align: 'right', maxWidth: 170 });
-      y += 4;
-    });
-    
-    doc.save(`${report.title || 'report'}.pdf`);
   };
 
   if (loading) {
@@ -462,11 +425,8 @@ export default function Reports() {
                       <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setViewReport(report)}>
                         <Eye className="w-3.5 h-3.5" />צפייה
                       </Button>
-                      <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => handleExportPdf(report)}>
-                        <Download className="w-3.5 h-3.5" />PDF
-                      </Button>
                       <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => handleExportHtml(report)}>
-                        <Download className="w-3.5 h-3.5" />HTML
+                        <Download className="w-3.5 h-3.5" />ייצא דוח
                       </Button>
                       <button onClick={() => handleDelete(report.id)} className="p-1.5 rounded hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors">
                         <Trash2 className="w-3.5 h-3.5" />
@@ -588,11 +548,8 @@ export default function Reports() {
               )}
 
               <div className="flex gap-2 pt-4 border-t border-border">
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleExportPdf(viewReport)}>
-                  <Download className="w-4 h-4" />ייצא PDF
-                </Button>
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleExportHtml(viewReport)}>
-                  <Download className="w-4 h-4" />ייצא HTML
+                  <Download className="w-4 h-4" />ייצא דוח
                 </Button>
               </div>
             </div>
