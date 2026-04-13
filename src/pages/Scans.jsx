@@ -91,8 +91,8 @@ export default function Scans() {
     e.preventDefault();
     e.stopPropagation();
     if (!confirm('למחוק את הסריקה וכל הממצאים שלה?')) return;
-    await base44.functions.invoke('deleteScan', { scan_job_id: scanId });
     setScans(prev => prev.filter(s => s.id !== scanId));
+    base44.functions.invoke('deleteScan', { scan_job_id: scanId });
   };
 
   const handleDeleteAll = async () => {
