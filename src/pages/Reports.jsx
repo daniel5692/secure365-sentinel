@@ -13,6 +13,20 @@ const REPORT_TYPES = [
   { value: 'remediation_plan', label: 'תוכנית תיקון (Remediation Plan)', icon: '📋', desc: 'רשימת תיקונים מתועדפת עם צעדי מעשה, אחראים מומלצים ולוחות זמנים.' },
 ];
 
+const STATUS_CONFIG = {
+  passed: { color: 'text-green-400 bg-green-500/10 border-green-500/30', label: 'עבר' },
+  failed: { color: 'text-red-400 bg-red-500/10 border-red-500/30', label: 'נכשל' },
+  warning: { color: 'text-amber-400 bg-amber-500/10 border-amber-500/30', label: 'אזהרה' },
+  manual: { color: 'text-blue-400 bg-blue-500/10 border-blue-500/30', label: 'ידני' },
+};
+
+const SEVERITY_CONFIG = {
+  critical: { color: 'text-red-400 bg-red-500/10 border-red-500/30', label: 'קריטי' },
+  high: { color: 'text-orange-400 bg-orange-500/10 border-orange-500/30', label: 'גבוה' },
+  medium: { color: 'text-amber-400 bg-amber-500/10 border-amber-500/30', label: 'בינוני' },
+  low: { color: 'text-blue-400 bg-blue-500/10 border-blue-500/30', label: 'נמוך' },
+};
+
 export default function Reports() {
   const [reports, setReports] = useState([]);
   const [scans, setScans] = useState([]);
@@ -102,20 +116,174 @@ export default function Reports() {
     setReports(prev => prev.filter(r => r.id !== id));
   };
 
+  const handleExportHtml = async (report) => {
+    const scan = scans.find(s => s.id === report.scan_job_id);
+    const results = await base44.entities.CheckResult.filter({ scan_job_id: report.scan_job_id });
+    
+    const html = `
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${report.title}</title>
+  <style>
+    body { font-family: 'Heebo', sans-serif; background: #0f1419; color: #e4e9f1; line-height: 1.6; margin: 0; padding: 20px; }
+    .container { max-width: 1000px; margin: 0 auto; }
+    .header { border-bottom: 2px solid #3d8ff7; padding-bottom: 20px; margin-bottom: 30px; }
+    h1 { margin: 0; font-size: 28px; }
+    .meta { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-top: 15px; font-size: 13px; color: #9ca3af; }
+    .meta div { display: flex; justify-content: space-between; }
+    .score-section { display: flex; align-items: center; gap: 30px; margin-bottom: 40px; padding: 20px; background: #1a2332; border: 1px solid #364455; border-radius: 8px; }
+    .score-ring { text-align: center; }
+    .score-value { font-size: 48px; font-weight: bold; color: #3d8ff7; }
+    .score-label { font-size: 12px; color: #9ca3af; margin-top: 5px; }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 30px; }
+    .stat { background: #1a2332; border: 1px solid #364455; border-radius: 8px; padding: 15px; text-align: center; }
+    .stat-value { font-size: 20px; font-weight: bold; }
+    .stat-label { font-size: 11px; color: #9ca3af; margin-top: 5px; }
+    .results-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+    .results-table thead { background: #1a2332; border-bottom: 2px solid #364455; }
+    .results-table th { padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: #9ca3af; }
+    .results-table td { padding: 12px; border-bottom: 1px solid #364455; font-size: 12px; }
+    .results-table tr:hover { background: #242f3d; }
+    .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; border: 1px solid; }
+    .badge-passed { color: #22c55e; background: #16a34a20; border-color: #16a34a; }
+    .badge-failed { color: #ef4444; background: #dc262620; border-color: #dc2626; }
+    .badge-warning { color: #f59e0b; background: #d9710020; border-color: #d97100; }
+    .badge-critical { color: #ef4444; background: #dc262620; border-color: #dc2626; }
+    .badge-high { color: #f97316; background: #ea580c20; border-color: #ea580c; }
+    .badge-medium { color: #eab308; background: #ca8a0420; border-color: #ca8a04; }
+    .badge-low { color: #3b82f6; background: #1d4ed820; border-color: #1d4ed8; }
+    .section { margin-top: 40px; }
+    .section-title { font-size: 18px; font-weight: 600; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #364455; }
+    .summary { background: #1a2332; padding: 20px; border-radius: 8px; border: 1px solid #364455; line-height: 1.8; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>${report.title}</h1>
+      <div class="meta">
+        <div><span>טננט:</span><strong>${report.tenant_name}</strong></div>
+        <div><span>תאריך סריקה:</span><strong>${new Date(report.scan_date).toLocaleDateString('he-IL')}</strong></div>
+        <div><span>גרסה:</span><strong>${report.benchmark_version}</strong></div>
+      </div>
+    </div>
+    
+    <div class="score-section">
+      <div class="score-ring">
+        <div class="score-value">${report.overall_score}</div>
+        <div class="score-label">ציון כללי</div>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="stat-value" style="color: #22c55e;">${report.passed_count || 0}</div><div class="stat-label">עברו</div></div>
+        <div class="stat"><div class="stat-value" style="color: #ef4444;">${report.failed_count || 0}</div><div class="stat-label">נכשלו</div></div>
+        <div class="stat"><div class="stat-value" style="color: #ef4444;">${report.findings_by_severity?.critical || 0}</div><div class="stat-label">קריטיים</div></div>
+        <div class="stat"><div class="stat-value">${report.total_findings || 0}</div><div class="stat-label">סה"כ בדיקות</div></div>
+      </div>
+    </div>
+    
+    <div class="section">
+      <div class="section-title">סיכום הדוח</div>
+      <div class="summary">${(report.summary_he || '').replace(/\n/g, '<br>')}</div>
+    </div>
+    
+    <div class="section">
+      <div class="section-title">תוצאות הבדיקות</div>
+      <table class="results-table">
+        <thead><tr><th>מזהה</th><th>בדיקה</th><th>תחום</th><th>חומרה</th><th>סטטוס</th></tr></thead>
+        <tbody>
+          ${results.map(r => `
+          <tr>
+            <td><code>${r.check_id}</code></td>
+            <td>${r.check_title}</td>
+            <td>${r.domain}</td>
+            <td><span class="badge badge-${r.severity}">${SEVERITY_CONFIG[r.severity]?.label || r.severity}</span></td>
+            <td><span class="badge badge-${r.status}">${STATUS_CONFIG[r.status]?.label || r.status}</span></td>
+          </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>
+    `.trim();
+    
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${report.title || 'report'}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleExportPdf = async (report) => {
     const { jsPDF } = await import('jspdf');
-    const doc = new jsPDF();
-    doc.setFontSize(16);
-    doc.text(report.title || 'דוח אבטחה', 20, 20);
+    const results = await base44.entities.CheckResult.filter({ scan_job_id: report.scan_job_id });
+    const doc = new jsPDF({ compress: true });
+    
+    // Set up RTL
+    doc.setFont('Heebo');
+    doc.setFontSize(18);
+    doc.text(report.title || 'דוח אבטחה', 20, 15, { align: 'right' });
+    
     doc.setFontSize(10);
-    doc.text(`תאריך: ${report.scan_date ? new Date(report.scan_date).toLocaleDateString('he-IL') : ''}`, 20, 32);
-    doc.text(`ציון: ${report.overall_score || 0}/100`, 20, 40);
-    doc.text(`עברו: ${report.passed_count || 0}  נכשלו: ${report.failed_count || 0}  קריטיים: ${report.findings_by_severity?.critical || 0}`, 20, 48);
+    let y = 25;
+    const metadata = [
+      `טננט: ${report.tenant_name}`,
+      `תאריך: ${report.scan_date ? new Date(report.scan_date).toLocaleDateString('he-IL') : ''}`,
+      `ציון כללי: ${report.overall_score}/100`,
+      `בנצ'מארק: ${report.benchmark_version}`,
+    ];
+    
+    metadata.forEach(text => {
+      doc.text(text, 20, y, { align: 'right' });
+      y += 5;
+    });
+    
+    y += 5;
+    doc.setFontSize(12);
+    doc.text('סטטיסטיקה', 20, y, { align: 'right' });
+    y += 8;
+    
+    doc.setFontSize(9);
+    const stats = `עברו: ${report.passed_count || 0} | נכשלו: ${report.failed_count || 0} | קריטיים: ${report.findings_by_severity?.critical || 0} | סה"כ: ${report.total_findings || 0}`;
+    doc.text(stats, 20, y, { align: 'right' });
+    
+    y += 10;
+    doc.setFontSize(12);
+    doc.text('סיכום', 20, y, { align: 'right' });
+    y += 8;
+    
     if (report.summary_he) {
       doc.setFontSize(9);
       const lines = doc.splitTextToSize(report.summary_he, 170);
-      doc.text(lines, 20, 60);
+      doc.text(lines, 20, y, { align: 'right', maxWidth: 170 });
+      y += lines.length * 4 + 5;
     }
+    
+    // Add new page for results if needed
+    if (y > 250) {
+      doc.addPage();
+      y = 15;
+    }
+    
+    doc.setFontSize(12);
+    doc.text('תוצאות הבדיקות', 20, y, { align: 'right' });
+    y += 8;
+    
+    // Simple table using text
+    doc.setFontSize(8);
+    results.slice(0, 50).forEach(r => {
+      if (y > 270) { doc.addPage(); y = 15; }
+      const text = `${r.check_id} | ${r.check_title.substring(0, 30)} | ${r.status}`;
+      doc.text(text, 20, y, { align: 'right', maxWidth: 170 });
+      y += 4;
+    });
+    
     doc.save(`${report.title || 'report'}.pdf`);
   };
 
@@ -193,6 +361,9 @@ export default function Reports() {
                       </Button>
                       <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => handleExportPdf(report)}>
                         <Download className="w-3.5 h-3.5" />PDF
+                      </Button>
+                      <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => handleExportHtml(report)}>
+                        <Download className="w-3.5 h-3.5" />HTML
                       </Button>
                       <button onClick={() => handleDelete(report.id)} className="p-1.5 rounded hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors">
                         <Trash2 className="w-3.5 h-3.5" />
@@ -287,6 +458,9 @@ export default function Reports() {
               <div className="flex gap-2 pt-2">
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleExportPdf(viewReport)}>
                   <Download className="w-4 h-4" />ייצא PDF
+                </Button>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleExportHtml(viewReport)}>
+                  <Download className="w-4 h-4" />ייצא HTML
                 </Button>
               </div>
             </div>
