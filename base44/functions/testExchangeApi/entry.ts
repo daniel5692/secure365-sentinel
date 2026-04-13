@@ -52,28 +52,44 @@ Deno.serve(async (req) => {
     return Response.json({ step: 'graph', error: e.message }, { status: 500 });
   }
 
-  // Step 3: Call Exchange REST API
+  // Step 3: Try Graph API alternatives for Exchange config
+  let graphToken2;
   try {
-    const res = await fetch(`https://outlook.office365.com/adminapi/beta/${orgId}/Organization`, {
-      headers: { Authorization: `Bearer ${exToken}`, 'Content-Type': 'application/json' },
+    const res = await fetch(`https://login.microsoftonline.com/${tenant_id}/oauth2/v2.0/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: Deno.env.get('AZURE_CLIENT_ID'),
+        client_secret: Deno.env.get('AZURE_CLIENT_SECRET'),
+        scope: 'https://graph.microsoft.com/.default',
+      }).toString(),
     });
-    const statusCode = res.status;
-    const text = await res.text();
-    let data;
-    try { data = JSON.parse(text); } catch { data = text; }
+    const d = await res.json();
+    graphToken2 = d.access_token;
+  } catch(e) {}
 
-    return Response.json({
-      success: res.ok,
-      status: statusCode,
-      orgId,
-      tokenAcquired: !!exToken,
-      // Key fields we care about
-      AuditDisabled: data?.value?.[0]?.AuditDisabled ?? data?.AuditDisabled,
-      OAuth2ClientProfileEnabled: data?.value?.[0]?.OAuth2ClientProfileEnabled ?? data?.OAuth2ClientProfileEnabled,
-      SmtpClientAuthenticationDisabled: data?.value?.[0]?.SmtpClientAuthenticationDisabled ?? data?.SmtpClientAuthenticationDisabled,
-      rawResponse: typeof data === 'object' ? JSON.stringify(data).substring(0, 2000) : data,
-    });
-  } catch (e) {
-    return Response.json({ step: 'exchange_api', error: e.message }, { status: 500 });
+  const graphPaths = [
+    '/beta/admin/exchange',
+    '/v1.0/admin/exchange',
+    '/beta/organization?$select=id,securityComplianceNotificationMails',
+    '/beta/reports/security/getMailboxSettings',
+  ];
+
+  const results = {};
+  for (const path of graphPaths) {
+    try {
+      const res = await fetch(`https://graph.microsoft.com${path}`, {
+        headers: { Authorization: `Bearer ${graphToken2}` },
+      });
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = text; }
+      results[path] = { status: res.status, data: JSON.stringify(data).substring(0, 600) };
+    } catch (e) {
+      results[path] = { error: e.message };
+    }
   }
+
+  return Response.json({ success: true, orgId, tokenAcquired: !!exToken, results });
 });
