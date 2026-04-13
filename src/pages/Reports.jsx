@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { FileText, Download, Eye, Calendar, Plus, Loader2, X, Trash2, ChevronLeft } from "lucide-react";
+import { FileText, Download, Eye, Calendar, Plus, Loader2, Trash2, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -8,6 +8,7 @@ import ScoreRing from "@/components/shared/ScoreRing";
 import SeverityBadge from "@/components/shared/SeverityBadge";
 import StatusBadge from "@/components/shared/StatusBadge";
 import { base44 } from "@/api/base44Client";
+import { getAllChecks, DOMAIN_META } from "@/lib/security-checks";
 
 function ReportSummary({ summary }) {
   if (!summary) return null;
@@ -28,27 +29,86 @@ function ReportSummary({ summary }) {
   );
 }
 
-function ReportFindingDetail({ result }) {
+function ReportFindingDetail({ finding, checkDef }) {
   return (
-    <div className="p-5 bg-secondary/10 border-t border-border space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div className="rounded-lg p-4 border bg-red-500/5 border-red-500/20">
-          <div className="text-[10px] font-semibold text-muted-foreground mb-1">ערך נוכחי</div>
-          <p className="text-xs text-red-400 break-all font-mono">{result.actual_value || '—'}</p>
+    <div className="p-5 bg-secondary/10 border-t border-border space-y-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className="lg:col-span-2 space-y-5">
+          <div className="bg-card border border-border rounded-xl p-5">
+            <h3 className="text-sm font-semibold text-foreground mb-4">תוצאת הבדיקה</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-xl p-4 border bg-red-500/5 border-red-500/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[11px] font-semibold text-muted-foreground uppercase">ערך נוכחי</span>
+                </div>
+                <p className="text-sm font-semibold text-red-400 leading-relaxed break-all">{finding.actual_value || '—'}</p>
+              </div>
+              <div className="rounded-xl p-4 border bg-green-500/5 border-green-500/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[11px] font-semibold text-muted-foreground uppercase">ערך מצופה</span>
+                </div>
+                <p className="text-sm font-semibold text-green-400 leading-relaxed break-all">{finding.expected_value || '—'}</p>
+              </div>
+            </div>
+          </div>
+
+          {finding.evidence && (
+            <div className="bg-card border border-border rounded-xl p-5">
+              <h3 className="text-sm font-semibold text-foreground mb-4">פירוט ממצאים</h3>
+              <div className="bg-secondary/30 rounded-lg p-3 border border-border">
+                <p className="text-xs text-muted-foreground break-all font-mono">{finding.evidence}</p>
+              </div>
+            </div>
+          )}
+
+          {checkDef?.descriptionHe && (
+            <div className="bg-card border border-border rounded-xl p-5">
+              <h3 className="text-sm font-semibold text-foreground mb-3">הסבר</h3>
+              <p className="text-sm text-muted-foreground leading-relaxed">{checkDef.descriptionHe}</p>
+            </div>
+          )}
+
+          {checkDef?.whyItMattersHe && (
+            <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-5">
+              <h3 className="text-sm font-semibold text-amber-400 mb-2">למה זה חשוב?</h3>
+              <p className="text-sm text-muted-foreground leading-relaxed">{checkDef.whyItMattersHe}</p>
+            </div>
+          )}
+
+          {(finding.status === 'failed' || finding.status === 'warning') && checkDef?.remediationHe && (
+            <div className="bg-green-500/5 border border-green-500/20 rounded-xl p-5">
+              <h3 className="text-sm font-semibold text-green-400 mb-3">צעדי תיקון מומלצים</h3>
+              <div className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
+                {checkDef.remediationHe}
+              </div>
+            </div>
+          )}
         </div>
-        <div className="rounded-lg p-4 border bg-green-500/5 border-green-500/20">
-          <div className="text-[10px] font-semibold text-muted-foreground mb-1">ערך מצופה</div>
-          <p className="text-xs text-green-400 break-all font-mono">{result.expected_value || '—'}</p>
-        </div>
-      </div>
-      {result.evidence && (
-        <div>
-          <div className="text-xs font-semibold text-foreground mb-2">עדויות</div>
-          <div className="bg-secondary/30 rounded-lg p-3 border border-border">
-            <p className="text-xs text-muted-foreground break-all font-mono">{result.evidence?.substring(0, 200)}</p>
+
+        <div className="space-y-5">
+          <div className="bg-card border border-border rounded-xl p-5">
+            <h3 className="text-sm font-semibold text-foreground mb-4">פרטי הבדיקה</h3>
+            <div className="space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-[10px] text-muted-foreground flex-shrink-0 mt-0.5">מזהה</span>
+                <span className="text-xs text-foreground text-left break-all font-mono">{finding.check_id}</span>
+              </div>
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-[10px] text-muted-foreground flex-shrink-0 mt-0.5">Framework</span>
+                <span className="text-xs text-foreground text-left">CIS M365 v6.0.1</span>
+              </div>
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-[10px] text-muted-foreground flex-shrink-0 mt-0.5">תחום</span>
+                <span className="text-xs text-foreground text-left">{DOMAIN_META[finding.domain]?.labelHe || finding.domain}</span>
+              </div>
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-[10px] text-muted-foreground flex-shrink-0 mt-0.5">קטגוריה</span>
+                <span className="text-xs text-foreground text-left break-all">{finding.category}</span>
+              </div>
+            </div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -57,6 +117,7 @@ function ReportResultsTable({ scanJobId }) {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState(null);
+  const checkDefs = getAllChecks();
 
   useEffect(() => {
     const load = async () => {
@@ -71,9 +132,9 @@ function ReportResultsTable({ scanJobId }) {
 
   return (
     <div>
-      <h3 className="text-sm font-semibold text-foreground mb-3">תוצאות הבדיקות ({results.length})</h3>
-      <div className="bg-card border border-border rounded-lg overflow-hidden">
-        <div className="grid grid-cols-12 gap-3 p-3 bg-secondary/30 text-xs font-semibold text-muted-foreground border-b border-border">
+      <h3 className="text-sm font-semibold text-foreground mb-3">ממצאי הסריקה ({results.length})</h3>
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="grid grid-cols-12 gap-4 p-4 bg-secondary/30 text-xs font-semibold text-muted-foreground border-b border-border">
           <div className="col-span-1">מזהה</div>
           <div className="col-span-4">בדיקה</div>
           <div className="col-span-2">חומרה</div>
@@ -82,58 +143,44 @@ function ReportResultsTable({ scanJobId }) {
           <div className="col-span-1"></div>
         </div>
         <div className="divide-y divide-border">
-          {results.map(r => (
-            <div key={r.id}>
-              <div
-                className="grid grid-cols-12 gap-3 p-3 items-center hover:bg-secondary/20 transition-colors text-xs cursor-pointer"
-                onClick={() => setExpandedId(expandedId === r.id ? null : r.id)}
-              >
-                <div className="col-span-1"><code className="text-primary text-[10px]">{r.check_id}</code></div>
-                <div className="col-span-4"><span className="text-foreground">{r.check_title}</span></div>
-                <div className="col-span-2"><SeverityBadge severity={r.severity} size="sm" /></div>
-                <div className="col-span-2"><StatusBadge status={r.status} size="sm" /></div>
-                <div className="col-span-2">
-                  <span className={cn(
-                    "text-[10px] font-medium",
-                    r.status === 'passed' ? 'text-green-400' :
-                    r.status === 'failed' ? 'text-red-400' :
-                    r.status === 'warning' ? 'text-amber-400' : 'text-blue-400'
-                  )}>
-                    {r.actual_value?.substring(0, 15) || '—'}
-                  </span>
+          {results.map(r => {
+            const checkDef = checkDefs.find(c => c.id === r.check_id);
+            return (
+              <div key={r.id}>
+                <div
+                  className="grid grid-cols-12 gap-4 p-4 items-center hover:bg-secondary/20 transition-colors cursor-pointer"
+                  onClick={() => setExpandedId(expandedId === r.id ? null : r.id)}
+                >
+                  <div className="col-span-1">
+                    <code className="text-[10px] font-mono text-primary">{r.check_id}</code>
+                  </div>
+                  <div className="col-span-4">
+                    <div className="text-xs font-medium text-foreground">{checkDef?.title || r.check_title}</div>
+                  </div>
+                  <div className="col-span-2">
+                    <SeverityBadge severity={r.severity} size="sm" />
+                  </div>
+                  <div className="col-span-2">
+                    <StatusBadge status={r.status} size="sm" />
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-xs text-muted-foreground">{r.actual_value?.substring(0, 20) || '—'}</span>
+                  </div>
+                  <div className="col-span-1 flex justify-end">
+                    <ChevronLeft className={cn("w-4 h-4 text-muted-foreground transition-transform duration-200", expandedId === r.id ? '-rotate-90' : '')} />
+                  </div>
                 </div>
-                <div className="col-span-1 flex justify-end">
-                  <ChevronLeft className={cn("w-4 h-4 text-muted-foreground transition-transform", expandedId === r.id && '-rotate-90')} />
-                </div>
+                {expandedId === r.id && (
+                  <ReportFindingDetail finding={r} checkDef={checkDef} />
+                )}
               </div>
-              {expandedId === r.id && <ReportFindingDetail result={r} />}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
   );
 }
-
-const REPORT_TYPES = [
-  { value: 'executive_summary', label: 'דוח מנהלים (Executive Summary)', icon: '📊', desc: 'סיכום ברמה גבוהה לניהול, כולל ציון כולל, סיכונים עיקריים והמלצות מפתח.' },
-  { value: 'technical_details', label: 'דוח טכני מפורט', icon: '🔧', desc: 'כל הממצאים עם עדויות מפורטות, הגדרות נוכחיות וצעדי תיקון מפורטים.' },
-  { value: 'remediation_plan', label: 'תוכנית תיקון (Remediation Plan)', icon: '📋', desc: 'רשימת תיקונים מתועדפת עם צעדי מעשה, אחראים מומלצים ולוחות זמנים.' },
-];
-
-const STATUS_CONFIG = {
-  passed: { color: 'text-green-400 bg-green-500/10 border-green-500/30', label: 'עבר' },
-  failed: { color: 'text-red-400 bg-red-500/10 border-red-500/30', label: 'נכשל' },
-  warning: { color: 'text-amber-400 bg-amber-500/10 border-amber-500/30', label: 'אזהרה' },
-  manual: { color: 'text-blue-400 bg-blue-500/10 border-blue-500/30', label: 'ידני' },
-};
-
-const SEVERITY_CONFIG = {
-  critical: { color: 'text-red-400 bg-red-500/10 border-red-500/30', label: 'קריטי' },
-  high: { color: 'text-orange-400 bg-orange-500/10 border-orange-500/30', label: 'גבוה' },
-  medium: { color: 'text-amber-400 bg-amber-500/10 border-amber-500/30', label: 'בינוני' },
-  low: { color: 'text-blue-400 bg-blue-500/10 border-blue-500/30', label: 'נמוך' },
-};
 
 export default function Reports() {
   const [reports, setReports] = useState([]);
@@ -142,8 +189,8 @@ export default function Reports() {
   const [showCreate, setShowCreate] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [selectedScan, setSelectedScan] = useState('');
-  const [selectedType, setSelectedType] = useState('executive_summary');
   const [viewReport, setViewReport] = useState(null);
+  const checkDefs = getAllChecks();
 
   const load = async () => {
     const user = await base44.auth.me();
@@ -161,8 +208,7 @@ export default function Reports() {
 
   useEffect(() => { load(); }, []);
 
-  const handleGenerate = async (typeOverride) => {
-    const type = typeOverride || selectedType;
+  const handleGenerate = async () => {
     const scan = scans.find(s => s.id === selectedScan);
     if (!scan) return;
     setGenerating(true);
@@ -174,9 +220,7 @@ export default function Reports() {
     const warnings = results.filter(r => r.status === 'warning');
     const criticals = failed.filter(r => r.severity === 'critical');
 
-    const typeLabel = REPORT_TYPES.find(t => t.value === type)?.label || type;
-
-    const prompt = `אתה מומחה אבטחת מידע ישראלי. צור ${typeLabel} בעברית עבור הערכת אבטחה של Microsoft 365.
+    const prompt = `אתה מומחה אבטחת מידע ישראלי. כתוב סיכום ביצוע סריקת אבטחה של Microsoft 365 בעברית.
 
 נתוני הסריקה:
 - טננט: ${scan.tenant_name}
@@ -184,9 +228,8 @@ export default function Reports() {
 - ציון כולל: ${scan.overall_score}/100
 - עברו: ${passed.length}, נכשלו: ${failed.length}, אזהרות: ${warnings.length}
 - בדיקות קריטיות שנכשלו: ${criticals.map(r => r.check_title).join(', ') || 'אין'}
-- כל הכישלונות: ${failed.map(r => `${r.check_id} - ${r.check_title} (${r.severity}): ${r.actual_value}`).join('\n')}
 
-כתוב דוח מקצועי, ברור ותמציתי בעברית. כלול: סיכום מנהלים, ממצאים עיקריים, רמת סיכון כוללת, והמלצות לתיקון לפי עדיפות.`;
+כתוב סיכום מקצועי תמציתי (2-3 פסקאות) על מצב האבטחה הכולל, סיכונים עיקריים והמלצות ראשוניות.`;
 
     const summary = await base44.integrations.Core.InvokeLLM({ prompt });
 
@@ -195,8 +238,8 @@ export default function Reports() {
       scan_job_id: scan.id,
       tenant_id: scan.tenant_id,
       tenant_name: scan.tenant_name,
-      report_type: type,
-      title: `${typeLabel} - ${scan.tenant_name}`,
+      report_type: 'full_report',
+      title: `דוח סריקת אבטחה - ${scan.tenant_name}`,
       scan_date: scan.created_date,
       overall_score: scan.overall_score,
       benchmark_version: scan.benchmark_version || 'CIS Microsoft 365 v6.0.1',
@@ -226,23 +269,23 @@ export default function Reports() {
   const handleExportHtml = async (report) => {
     const results = await base44.entities.CheckResult.filter({ scan_job_id: report.scan_job_id });
     
-    const summaryHtml = report.summary_he ? `
-    <div class="summary-section">
-      <div class="summary-title">סיכום הדוח</div>
-      <div class="summary-text">${(report.summary_he || '').replace(/\n/g, '<br>')}</div>
-    </div>
-    ` : '';
-
     const resultsHtml = results.map(r => {
-      const evidenceHtml = r.evidence ? `<div class="detail-box"><div class="detail-label">עדויות</div><div class="detail-value">${r.evidence?.substring(0, 300) || '—'}</div></div>` : '';
+      const checkDef = checkDefs.find(c => c.id === r.check_id);
+      const evidenceHtml = r.evidence ? `<div class="detail-box"><div class="detail-label">פירוט ממצאים</div><div class="detail-value">${r.evidence || '—'}</div></div>` : '';
+      const remediationHtml = (r.status === 'failed' || r.status === 'warning') && checkDef?.remediationHe ? `
+        <div class="remediation-box">
+          <div class="detail-label">צעדי תיקון מומלצים</div>
+          <div class="detail-value">${checkDef.remediationHe.replace(/\n/g, '<br>')}</div>
+        </div>
+      ` : '';
+      
       return `
       <div class="result-item" onclick="document.getElementById('detail-${r.id}').classList.toggle('open')">
         <div class="result-header">
           <div class="result-id">${r.check_id}</div>
-          <div class="result-title">${r.check_title}</div>
-          <div class="result-domain">${r.domain || '—'}</div>
-          <div><span class="badge badge-${r.severity}">${SEVERITY_CONFIG[r.severity]?.label || r.severity}</span></div>
-          <div><span class="badge badge-${r.status}">${STATUS_CONFIG[r.status]?.label || r.status}</span></div>
+          <div class="result-title">${checkDef?.title || r.check_title}</div>
+          <div><span class="badge badge-${r.severity}">${{critical: 'קריטי', high: 'גבוה', medium: 'בינוני', low: 'נמוך', informational: 'מידע'}[r.severity] || r.severity}</span></div>
+          <div><span class="badge badge-${r.status}">${{passed: 'עבר', failed: 'נכשל', warning: 'אזהרה', manual: 'ידני', not_applicable: 'לא רלוונטי'}[r.status] || r.status}</span></div>
         </div>
         <div id="detail-${r.id}" class="result-detail">
           <div class="detail-grid">
@@ -250,6 +293,11 @@ export default function Reports() {
             <div class="detail-box passed"><div class="detail-label">ערך מצופה</div><div class="detail-value success">${r.expected_value || '—'}</div></div>
           </div>
           ${evidenceHtml}
+          ${checkDef?.descriptionHe ? `<div class="detail-box"><div class="detail-label">הסבר</div><div class="detail-value">${checkDef.descriptionHe}</div></div>` : ''}
+          ${checkDef?.whyItMattersHe ? `<div class="detail-box important"><div class="detail-label">למה זה חשוב?</div><div class="detail-value">${checkDef.whyItMattersHe}</div></div>` : ''}
+          ${remediationHtml}
+          <div class="detail-box"><div class="detail-label">תחום</div><div class="detail-value">${DOMAIN_META[r.domain]?.labelHe || r.domain}</div></div>
+          <div class="detail-box"><div class="detail-label">קטגוריה</div><div class="detail-value">${r.category}</div></div>
         </div>
       </div>
       `;
@@ -273,8 +321,7 @@ export default function Reports() {
     .meta-label { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
     .meta-value { font-size: 16px; font-weight: 600; color: #e4e9f1; }
     .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 50px; }
-    .stat-card { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 1px solid #1e293b; border-radius: 12px; padding: 20px; text-align: center; transition: all 0.3s; }
-    .stat-card:hover { border-color: #3d8ff7; transform: translateY(-2px); box-shadow: 0 8px 16px rgba(61, 143, 247, 0.1); }
+    .stat-card { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 1px solid #1e293b; border-radius: 12px; padding: 20px; text-align: center; }
     .stat-value { font-size: 32px; font-weight: 700; margin-bottom: 8px; }
     .stat-label { font-size: 13px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
     .summary-section { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 1px solid #1e293b; border-radius: 12px; padding: 30px; margin-bottom: 40px; line-height: 1.8; }
@@ -283,10 +330,9 @@ export default function Reports() {
     .results-section h2 { font-size: 20px; font-weight: 700; margin-bottom: 20px; color: #e4e9f1; }
     .result-item { background: #1e293b; border: 1px solid #1e293b; border-radius: 8px; margin-bottom: 12px; cursor: pointer; transition: all 0.2s; }
     .result-item:hover { border-color: #3d8ff7; background: #0f172a; }
-    .result-header { display: grid; grid-template-columns: 80px 1fr 120px 120px 100px; gap: 15px; padding: 15px 20px; align-items: center; }
+    .result-header { display: grid; grid-template-columns: 100px 1fr 120px 120px; gap: 15px; padding: 15px 20px; align-items: center; }
     .result-id { font-family: 'Monaco', 'Courier', monospace; font-size: 12px; color: #3d8ff7; font-weight: 600; }
     .result-title { font-size: 14px; font-weight: 500; color: #e4e9f1; }
-    .result-domain { font-size: 12px; color: #94a3b8; }
     .badge { display: inline-block; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; border: 1px solid; }
     .badge-passed { color: #22c55e; background: rgba(34, 197, 94, 0.1); border-color: rgba(34, 197, 94, 0.3); }
     .badge-failed { color: #ef4444; background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3); }
@@ -301,8 +347,10 @@ export default function Reports() {
     .detail-box { background: #1e293b; border: 1px solid #1e293b; border-radius: 8px; padding: 15px; }
     .detail-box.passed { border-color: rgba(34, 197, 94, 0.3); }
     .detail-box.failed { border-color: rgba(239, 68, 68, 0.3); }
-    .detail-label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
-    .detail-value { font-family: 'Monaco', 'Courier', monospace; font-size: 12px; color: #cbd5e1; word-break: break-all; }
+    .detail-box.important { border-color: rgba(245, 158, 11, 0.3); }
+    .remediation-box { background: #1e293b; border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 8px; padding: 15px; margin-bottom: 20px; }
+    .detail-label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; font-weight: 600; }
+    .detail-value { font-size: 13px; color: #cbd5e1; line-height: 1.6; word-break: break-word; }
     .detail-value.success { color: #22c55e; }
     .detail-value.error { color: #ef4444; }
   </style>
@@ -325,10 +373,13 @@ export default function Reports() {
       <div class="stat-card"><div class="stat-value" style="color: #ef4444;">${report.findings_by_severity?.critical || 0}</div><div class="stat-label">קריטיים</div></div>
     </div>
 
-    ${summaryHtml}
+    <div class="summary-section">
+      <div class="summary-title">סיכום הדוח</div>
+      <div class="summary-text">${(report.summary_he || '').replace(/\n/g, '<br>')}</div>
+    </div>
 
     <div class="results-section">
-      <h2>פרטי הבדיקות</h2>
+      <h2>ממצאי הסריקה (${results.length})</h2>
       ${resultsHtml}
     </div>
   </div>
@@ -365,8 +416,8 @@ export default function Reports() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">דוחות</h1>
-          <p className="text-sm text-muted-foreground mt-1">צפייה ויצוא דוחות הערכת אבטחה</p>
+          <h1 className="text-2xl font-bold text-foreground">דוח הסריקה</h1>
+          <p className="text-sm text-muted-foreground mt-1">צפייה ויצוא דוח סריקת אבטחה</p>
         </div>
         <Button className="gap-2" onClick={() => setShowCreate(true)} disabled={scans.length === 0}>
           <Plus className="w-4 h-4" />
@@ -399,9 +450,6 @@ export default function Reports() {
                     <span className="px-2 py-0.5 rounded text-[10px] font-medium border bg-green-500/10 text-green-400 border-green-500/30">
                       מוכן
                     </span>
-                    <span className="text-[10px] text-muted-foreground">
-                      {REPORT_TYPES.find(t => t.value === report.report_type)?.icon} {REPORT_TYPES.find(t => t.value === report.report_type)?.label}
-                    </span>
                   </div>
                   <div className="flex items-center gap-4 text-xs text-muted-foreground mb-3">
                     <span className="flex items-center gap-1">
@@ -426,7 +474,7 @@ export default function Reports() {
                         <Eye className="w-3.5 h-3.5" />צפייה
                       </Button>
                       <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => handleExportHtml(report)}>
-                        <Download className="w-3.5 h-3.5" />ייצא דוח
+                        <Download className="w-3.5 h-3.5" />ייצא
                       </Button>
                       <button onClick={() => handleDelete(report.id)} className="p-1.5 rounded hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors">
                         <Trash2 className="w-3.5 h-3.5" />
@@ -440,26 +488,6 @@ export default function Reports() {
         </div>
       )}
 
-      {scans.length > 0 && (
-        <div className="bg-card border border-border rounded-xl p-6">
-          <h3 className="text-sm font-semibold text-foreground mb-4">תבניות דוח זמינות</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {REPORT_TYPES.map(tpl => (
-              <button
-                key={tpl.value}
-                onClick={() => { setSelectedType(tpl.value); setShowCreate(true); }}
-                disabled={generating}
-                className="p-4 rounded-lg border border-border hover:border-primary/30 hover:bg-primary/5 transition-colors text-right"
-              >
-                <div className="text-2xl mb-2">{tpl.icon}</div>
-                <h4 className="text-xs font-semibold text-foreground mb-1">{tpl.label}</h4>
-                <p className="text-[10px] text-muted-foreground">{tpl.desc}</p>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent dir="rtl">
           <DialogHeader>
@@ -467,7 +495,7 @@ export default function Reports() {
           </DialogHeader>
           <div className="space-y-4 mt-2">
             <div>
-              <label className="text-sm text-muted-foreground block mb-1.5">סריקה</label>
+              <label className="text-sm text-muted-foreground block mb-1.5">בחר סריקה</label>
               <Select value={selectedScan} onValueChange={setSelectedScan}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -475,17 +503,6 @@ export default function Reports() {
                     <SelectItem key={s.id} value={s.id}>
                       {s.tenant_name} — {new Date(s.created_date).toLocaleDateString('he-IL')} (ציון: {s.overall_score})
                     </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-sm text-muted-foreground block mb-1.5">סוג דוח</label>
-              <Select value={selectedType} onValueChange={setSelectedType}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {REPORT_TYPES.map(t => (
-                    <SelectItem key={t.value} value={t.value}>{t.icon} {t.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -509,8 +526,6 @@ export default function Reports() {
                     <span>{viewReport.tenant_name}</span>
                     <span>•</span>
                     <span>{viewReport.scan_date ? new Date(viewReport.scan_date).toLocaleDateString('he-IL') : ''}</span>
-                    <span>•</span>
-                    <span>{viewReport.benchmark_version}</span>
                   </div>
                 </div>
                 <ScoreRing score={viewReport.overall_score || 0} size={100} />
@@ -549,7 +564,7 @@ export default function Reports() {
 
               <div className="flex gap-2 pt-4 border-t border-border">
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleExportHtml(viewReport)}>
-                  <Download className="w-4 h-4" />ייצא דוח
+                  <Download className="w-4 h-4" />ייצא ל-HTML
                 </Button>
               </div>
             </div>
