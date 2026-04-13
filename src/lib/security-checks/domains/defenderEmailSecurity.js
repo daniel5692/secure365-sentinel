@@ -13,8 +13,8 @@ registerCheck({
   expectedState: 'Safe Links policy with Office 365 apps protection enabled (EnableForOfficeApps = true)',
   remediationHe: 'Microsoft Defender portal (security.microsoft.com) → Email & collaboration → Policies & rules → Threat policies → Safe Links → ערוך policy קיימת או צור חדשה → בקטע "Office 365 apps": סמן "Enable Safe Links in Office 365 apps" → סמן "Do not let users click through Safe Links to original URL" → Save.',
   whyItMattersHe: 'קישורים זדוניים בקבצי Office לא מטופלים על ידי Safe Links לדואר. תוקפים שולחים קבצי Word עם hyperlinks שעוקפים את הגנת הדואר.',
-  graphApiEndpoint: '/security/secureScores',
-  requiredPermissions: ['SecurityEvents.Read.All'],
+  graphApiEndpoint: '/security/threatSubmission/urlThreatSubmissionPolicies',
+  requiredPermissions: ['SecurityEvents.Read.All', 'ThreatAssessment.ReadWrite.All'],
   isAutomated: true,
 });
 
@@ -29,8 +29,8 @@ registerCheck({
   expectedState: 'Anti-malware policy with common attachment filter enabled',
   remediationHe: 'Microsoft Defender portal (security.microsoft.com) → Email & collaboration → Policies & rules → Threat policies → Anti-malware → ערוך "Default (Default)" policy → בקטע "Protection settings": הפעל "Enable the common attachments filter" → הוסף סוגי קבצים לפי הצורך → Notify: "Notify internal senders" → Save.',
   whyItMattersHe: 'קבצי הפעלה (.exe, .com) וסקריפטים (.js, .vbs) לא אמורים להישלח בדואר ארגוני. חסימה אוטומטית מונעת אינספור וקטורי תקיפה.',
-  graphApiEndpoint: '/security/secureScores',
-  requiredPermissions: ['SecurityEvents.Read.All'],
+  graphApiEndpoint: '/security/threatSubmission/emailThreatSubmissionPolicies',
+  requiredPermissions: ['SecurityEvents.Read.All', 'ThreatAssessment.ReadWrite.All'],
   isAutomated: true,
 });
 
@@ -45,8 +45,8 @@ registerCheck({
   expectedState: 'Anti-malware policy notifies sender when malware is detected in outbound email',
   remediationHe: 'Microsoft Defender portal (security.microsoft.com) → Email & collaboration → Policies & rules → Threat policies → Anti-malware → ערוך "Default" policy → בקטע "Notification": הפעל "Notify an admin about undelivered messages from internal senders" → הזן כתובת מנהל → Save.',
   whyItMattersHe: 'חשבון פנימי ששולח malware הוא סימן לפריצה. התראה מיידית מאפשרת תגובה מהירה לפני שהנזק מתפשט.',
-  graphApiEndpoint: '/security/secureScores',
-  requiredPermissions: ['SecurityEvents.Read.All'],
+  graphApiEndpoint: '/security/threatAssessment/emailMalwarePolicies',
+  requiredPermissions: ['SecurityEvents.Read.All', 'ThreatAssessment.ReadWrite.All'],
   isAutomated: true,
 });
 
@@ -61,8 +61,8 @@ registerCheck({
   expectedState: 'Safe Attachments enabled for SharePoint/OneDrive/Teams (AllowSafeDocsOpen = false)',
   remediationHe: 'Microsoft Defender portal (security.microsoft.com) → Email & collaboration → Policies & rules → Threat policies → Safe Attachments → Global settings → הפעל "Turn on Defender for Office 365 for SharePoint, OneDrive, and Microsoft Teams" → הפעל "Turn on Safe Documents for Office clients" → כבה "Allow people to click through Protected View even if Safe Documents identified the file as malicious" → Save.',
   whyItMattersHe: 'קבצים זדוניים יכולים להיכנס לארגון דרך OneDrive/Teams ישירות, תוך עקיפת הגנת הדואר. Safe Attachments לענן מכסה וקטור תקיפה זה.',
-  graphApiEndpoint: '/security/secureScores',
-  requiredPermissions: ['SecurityEvents.Read.All'],
+  graphApiEndpoint: '/security/threatSubmission/emailThreatSubmissionPolicies',
+  requiredPermissions: ['SecurityEvents.Read.All', 'ThreatAssessment.ReadWrite.All'],
   isAutomated: true,
 });
 
@@ -77,8 +77,8 @@ registerCheck({
   expectedState: 'Outbound spam policy notifies admins; BccSuspiciousOutboundMail = true',
   remediationHe: 'Microsoft Defender portal (security.microsoft.com) → Email & collaboration → Policies & rules → Threat policies → Anti-spam → ערוך "Anti-spam outbound policy (Default)" → Automatic forwarding: Off → Notifications: הפעל "Send a copy of suspicious outbound email to these email addresses" ו-"Notify these users and groups if a sender is blocked" → הזן כתובת מנהל → Save.',
   whyItMattersHe: 'חשבון שנפרץ ומשמש לשליחת ספאם יוביל לחסימת הדומיין כולו ב-blacklists. התראה מהירה מאפשרת בלימה לפני נזק מוניטין.',
-  graphApiEndpoint: '/security/secureScores',
-  requiredPermissions: ['SecurityEvents.Read.All'],
+  graphApiEndpoint: '/security/threatAssessment/outboundSpamPolicies',
+  requiredPermissions: ['SecurityEvents.Read.All', 'ThreatAssessment.ReadWrite.All'],
   isAutomated: true,
 });
 
@@ -93,8 +93,8 @@ registerCheck({
   expectedState: 'Anti-malware policy blocks extended list including: iso, img, lnk, cab, ps1, vhd, xll',
   remediationHe: 'Microsoft Defender portal (security.microsoft.com) → Email & collaboration → Policies & rules → Threat policies → Anti-malware → Default policy → Edit → Common attachment filter → "+ Add file types" → הוסף: iso, img, lnk, cab, ps1, vhd, xll, wsf, hta, pif → Save.',
   whyItMattersHe: 'תוקפים משתמשים בסוגי קבצים פחות מוכרים כמו .iso (קבצי דיסק) ו-.lnk (קיצורי דרך) להפעלת malware שעוקף מסנני ברירת מחדל.',
-  graphApiEndpoint: '/security/secureScores',
-  requiredPermissions: ['SecurityEvents.Read.All'],
+  graphApiEndpoint: '/security/threatSubmission/emailThreatSubmissionPolicies',
+  requiredPermissions: ['SecurityEvents.Read.All', 'ThreatAssessment.ReadWrite.All'],
   isAutomated: true,
 });
 
@@ -109,8 +109,8 @@ registerCheck({
   expectedState: 'Connection filter policy IPAllowList is empty',
   remediationHe: 'Microsoft Defender portal (security.microsoft.com) → Email & collaboration → Policies & rules → Threat policies → Anti-spam → Connection filter policy (Default) → Edit → IP Allow List: הסר את כל הכתובות → Save. אם נדרש whitelist של שולח ספציפי, השתמש ב-Advanced Delivery (Connectors) ולא ב-IP Allow List.',
   whyItMattersHe: 'כתובת IP ב-allow list מאפשרת לתוקף לשלוח malware, phishing וספאם ללא כל בדיקה — עוקפת Safe Attachments, Safe Links ו-Anti-spam.',
-  graphApiEndpoint: '/security/secureScores',
-  requiredPermissions: ['SecurityEvents.Read.All'],
+  graphApiEndpoint: '/security/threatAssessment/connectionFilterPolicies',
+  requiredPermissions: ['SecurityEvents.Read.All', 'ThreatAssessment.ReadWrite.All'],
   isAutomated: true,
 });
 
@@ -125,8 +125,8 @@ registerCheck({
   expectedState: 'Connection filter policy EnableSafeList = false',
   remediationHe: 'Microsoft Defender portal (security.microsoft.com) → Email & collaboration → Policies & rules → Threat policies → Anti-spam → Connection filter policy (Default) → Edit → כבה "Turn on safe list" → Save.',
   whyItMattersHe: 'ה-Safe list מבוססת על מוניטין ועשויה לכלול שרתי דואר לגיטימיים שנפרצו. כיבויה מבטיח שכל הודעה נבדקת.',
-  graphApiEndpoint: '/security/secureScores',
-  requiredPermissions: ['SecurityEvents.Read.All'],
+  graphApiEndpoint: '/security/threatAssessment/connectionFilterPolicies',
+  requiredPermissions: ['SecurityEvents.Read.All', 'ThreatAssessment.ReadWrite.All'],
   isAutomated: true,
 });
 
@@ -141,8 +141,8 @@ registerCheck({
   expectedState: 'All anti-spam policies have empty AllowedSenderDomains list',
   remediationHe: 'Microsoft Defender portal (security.microsoft.com) → Email & collaboration → Policies & rules → Threat policies → Anti-spam → בדוק כל policy → Edit → בקטע "Allowed and blocked senders and domains": הסר את כל הדומיינים מ-"Allowed domains" → Save. אם צריך whitelist לשולח ספציפי, השתמש ב-Advanced Delivery.',
   whyItMattersHe: 'דומיין שנפרץ ברשימת ה-Allow הפך לוקטור תקיפה ישיר. תוקף שיפרוץ ל-partner.com יוכל לשלוח phishing ללא כל בדיקה.',
-  graphApiEndpoint: '/security/secureScores',
-  requiredPermissions: ['SecurityEvents.Read.All'],
+  graphApiEndpoint: '/security/threatAssessment/antiSpamPolicies',
+  requiredPermissions: ['SecurityEvents.Read.All', 'ThreatAssessment.ReadWrite.All'],
   isAutomated: true,
 });
 
@@ -157,8 +157,8 @@ registerCheck({
   expectedState: 'Outbound spam policy: RecipientLimitExternalPerHour ≤ 500, ActionWhenThresholdReached = BlockUser',
   remediationHe: 'Microsoft Defender portal (security.microsoft.com) → Email & collaboration → Policies & rules → Threat policies → Anti-spam → Anti-spam outbound policy (Default) → Edit → Message limits: External hourly limit: 500, Daily limit: 1000, Internal hourly limit: 1000 → Action when limit is reached: "Restrict the user from sending mail" → Save.',
   whyItMattersHe: 'חשבון שנפרץ ומשמש לספאם יכול לשלוח מאות אלפי הודעות ביום, מה שמוביל לחסימת הדומיין ב-blacklists גלובליים.',
-  graphApiEndpoint: '/security/secureScores',
-  requiredPermissions: ['SecurityEvents.Read.All'],
+  graphApiEndpoint: '/security/threatAssessment/outboundSpamPolicies',
+  requiredPermissions: ['SecurityEvents.Read.All', 'ThreatAssessment.ReadWrite.All'],
   isAutomated: true,
 });
 
@@ -173,8 +173,8 @@ registerCheck({
   expectedState: 'Priority accounts configured with key executives and admins tagged',
   remediationHe: 'Microsoft Defender portal (security.microsoft.com) → Settings → Email & collaboration → User tags → Priority account → Edit → הוסף את כל המנהלים הבכירים, בעלי הרשאות גלובליות, וחשבונות קריטיים → Save. לאחר מכן ודא שה-Threat protection status report מציג את ה-Priority accounts.',
   whyItMattersHe: 'חשבונות בכירים (CEO, CFO, IT Admin) הם המטרות הנפוצות ביותר להתקפות BEC ו-spear phishing. ניטור מוגבר מאפשר זיהוי מוקדם.',
-  graphApiEndpoint: '/security/secureScores',
-  requiredPermissions: ['SecurityEvents.Read.All'],
+  graphApiEndpoint: '/directoryObjects/getByIds',
+  requiredPermissions: ['SecurityEvents.Read.All', 'User.Read.All'],
   isAutomated: true,
 });
 
@@ -189,8 +189,8 @@ registerCheck({
   expectedState: 'Priority accounts covered by Strict preset security policies',
   remediationHe: 'Microsoft Defender portal (security.microsoft.com) → Email & collaboration → Policies & rules → Preset security policies → Strict protection → Edit → בקטע "Apply Exchange Online Protection": הוסף את קבוצת ה-Priority accounts → בקטע "Apply Defender for Office 365 protection": הוסף אותם שוב → Review and confirm → Save.',
   whyItMattersHe: 'Strict preset כולל בדיקות נוספות ומחמירות שאינן חלק מ-Standard: הסגר (quarantine) עם אישור מנהל, הגנת impersonation מלאה, ו-ZAP תוקפני יותר.',
-  graphApiEndpoint: '/security/secureScores',
-  requiredPermissions: ['SecurityEvents.Read.All'],
+  graphApiEndpoint: '/security/threatAssessment/securityPresetPolicies',
+  requiredPermissions: ['SecurityEvents.Read.All', 'ThreatAssessment.ReadWrite.All'],
   isAutomated: true,
 });
 
@@ -205,7 +205,7 @@ registerCheck({
   expectedState: 'Zero-hour auto purge enabled for Microsoft Teams messages',
   remediationHe: 'Microsoft Defender portal (security.microsoft.com) → Email & collaboration → Policies & rules → Threat policies → Safe Attachments → Global settings → הפעל "Enable ZAP for Teams messages" → Save. שים לב: דורש Defender for Office 365 Plan 2.',
   whyItMattersHe: 'לאחר שהודעה נמסרה ב-Teams, ייתכן שהתגלה שהיא זדונית. ZAP מסיר אותה רטרואקטיבית ומונע פתיחה מאוחרת על ידי משתמשים.',
-  graphApiEndpoint: '/security/secureScores',
-  requiredPermissions: ['SecurityEvents.Read.All'],
+  graphApiEndpoint: '/security/threatSubmission/emailThreatSubmissionPolicies',
+  requiredPermissions: ['SecurityEvents.Read.All', 'ThreatAssessment.ReadWrite.All'],
   isAutomated: true,
 });
