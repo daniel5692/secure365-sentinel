@@ -20,6 +20,7 @@ export default function Findings() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [domainFilter, setDomainFilter] = useState('all');
   const [expandedFinding, setExpandedFinding] = useState(null);
+  const [resultsLoading, setResultsLoading] = useState(false);
 
   const handleOverrideChange = useCallback((updatedFinding) => {
     setResults(prev => prev.map(r => r.id === updatedFinding.id ? { ...r, ...updatedFinding } : r));
@@ -30,21 +31,33 @@ export default function Findings() {
   const urlScanId = urlParams.get('scan');
   const [selectedScan, setSelectedScan] = useState(urlScanId || 'all');
 
+  const loadResultsForScan = async (scanId, allScans) => {
+    if (!scanId || scanId === 'all') {
+      // For 'all', load only the most recent scan to avoid huge payloads
+      const firstScan = allScans[0];
+      if (!firstScan) return;
+      const res = await base44.functions.invoke('getCheckResults', { scan_job_ids: [firstScan.id] });
+      setResults(res.data?.results || []);
+    } else {
+      const res = await base44.functions.invoke('getCheckResults', { scan_job_ids: [scanId] });
+      setResults(res.data?.results || []);
+    }
+  };
+
   useEffect(() => {
     base44.auth.me().then(async user => {
-      const allScans = await base44.entities.ScanJob.filter({ created_by: user.email }, '-created_date', 50);
+      const allScans = await base44.entities.ScanJob.filter({ created_by: user.email }, '-created_date', 20);
       const completedScans = allScans.filter(sc => sc.status === 'completed');
       setScans(completedScans);
       if (completedScans.length === 0) { setLoading(false); return; }
-      const res = await base44.functions.invoke('getCheckResults', { scan_job_ids: completedScans.map(s => s.id) });
-      setResults(res.data?.results || []);
+      await loadResultsForScan(urlScanId || 'all', completedScans);
       setLoading(false);
     });
   }, []);
 
   const filtered = results
     .filter(r => {
-      if (selectedScan !== 'all' && r.scan_job_id !== selectedScan) return false;
+      if (selectedScan !== 'all' && selectedScan !== scans[0]?.id && r.scan_job_id !== selectedScan) return false;
       if (search && !r.check_title?.toLowerCase().includes(search.toLowerCase()) && !r.check_id?.toLowerCase().includes(search.toLowerCase())) return false;
       if (severityFilter !== 'all' && r.severity !== severityFilter) return false;
       if (statusFilter !== 'all' && r.status !== statusFilter) return false;
@@ -74,7 +87,16 @@ export default function Findings() {
             {loading ? 'טוען...' : `${filtered.length} ממצאים${selectedScan !== 'all' ? ` בסריקה זו` : ' בסך הכל'}`}
           </p>
         </div>
-        <Select value={selectedScan} onValueChange={setSelectedScan}>
+        <Select value={selectedScan} onValueChange={async (val) => {
+          setSelectedScan(val);
+          setResultsLoading(true);
+          const targetId = val === 'all' ? scans[0]?.id : val;
+          if (targetId) {
+            const res = await base44.functions.invoke('getCheckResults', { scan_job_ids: [targetId] });
+            setResults(res.data?.results || []);
+          }
+          setResultsLoading(false);
+        }}>
           <SelectTrigger className="w-64">
             <SelectValue placeholder="בחר סריקה" />
           </SelectTrigger>
@@ -130,7 +152,7 @@ export default function Findings() {
         </Select>
       </div>
 
-      {loading ? (
+      {(loading || resultsLoading) ? (
         <div className="flex items-center justify-center h-40">
           <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
         </div>

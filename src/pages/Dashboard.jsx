@@ -14,7 +14,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [tenants, setTenants] = useState([]);
   const [scans, setScans] = useState([]);
-  const [results, setResults] = useState([]);
+  const [criticalResults, setCriticalResults] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Handle Microsoft consent callback
@@ -50,19 +50,26 @@ export default function Dashboard() {
     Promise.all([
       base44.entities.ConnectedTenant.filter({ created_by: user.email }),
       base44.entities.ScanJob.filter({ created_by: user.email }, '-created_date', 10),
-      base44.entities.CheckResult.filter({ created_by: user.email }, '-created_date', 100),
-    ]).then(([t, s, r]) => {
+    ]).then(async ([t, s]) => {
       setTenants(t);
       setScans(s);
-      setResults(r);
+      // Fetch only critical failed from latest scan for the alert panel
+      const latest = s[0];
+      if (latest?.id) {
+        const crit = await base44.entities.CheckResult.filter(
+          { scan_job_id: latest.id, status: 'failed', severity: 'critical' },
+          '-created_date', 8
+        ).catch(() => []);
+        setCriticalResults(crit);
+      }
       setLoading(false);
     });
   }, [user]);
 
   const latestScan = scans[0];
-  const failedResults = results.filter(r => r.status === 'failed');
-  const criticalFailed = failedResults.filter(r => r.severity === 'critical');
   const connectedTenants = tenants.filter(t => t.connection_status === 'connected');
+  const failedCount = latestScan?.summary?.failed || 0;
+  const criticalFailed = criticalResults;
 
   if (loading) {
     return (
@@ -130,13 +137,13 @@ export default function Dashboard() {
         <div className="lg:col-span-8 grid grid-cols-2 md:grid-cols-4 gap-4">
           <StatCard title="טננטים מחוברים" value={connectedTenants.length} subtitle={`מתוך ${tenants.length}`} icon={Server} variant="info" />
           <StatCard title="בדיקות שעברו" value={latestScan?.summary?.passed || 0} subtitle={`מתוך ${latestScan?.total_checks || 0}`} icon={CheckCircle2} variant="success" />
-          <StatCard title="ממצאים שנכשלו" value={failedResults.length} subtitle="דורשים טיפול" icon={AlertTriangle} variant="danger" />
+          <StatCard title="ממצאים שנכשלו" value={failedCount} subtitle="דורשים טיפול" icon={AlertTriangle} variant="danger" />
           <StatCard title="ממצאים קריטיים" value={criticalFailed.length} subtitle="עדיפות גבוהה" icon={Shield} variant="danger" />
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <DomainBreakdown results={results} />
+        <DomainBreakdown results={criticalResults} />
         <RecentScans scans={scans} />
       </div>
 
