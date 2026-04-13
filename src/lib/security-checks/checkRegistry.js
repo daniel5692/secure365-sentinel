@@ -6,7 +6,6 @@ const checkRegistry = new Map();
 
 export function registerCheck(check) {
   if (checkRegistry.has(check.id)) {
-    console.warn(`Check ${check.id} already registered, skipping duplicate.`);
     return;
   }
   checkRegistry.set(check.id, check);
