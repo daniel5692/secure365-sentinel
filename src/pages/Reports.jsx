@@ -1,11 +1,64 @@
 import { useState, useEffect } from "react";
-import { FileText, Download, Eye, Calendar, Plus, Loader2, X, Trash2 } from "lucide-react";
+import { FileText, Download, Eye, Calendar, Plus, Loader2, X, Trash2, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import ScoreRing from "@/components/shared/ScoreRing";
+import SeverityBadge from "@/components/shared/SeverityBadge";
+import StatusBadge from "@/components/shared/StatusBadge";
 import { base44 } from "@/api/base44Client";
+
+function ReportResultsTable({ scanJobId }) {
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      const res = await base44.entities.CheckResult.filter({ scan_job_id: scanJobId }, '-created_date', 100);
+      setResults(res);
+      setLoading(false);
+    };
+    load();
+  }, [scanJobId]);
+
+  if (loading) return <div className="text-center py-4"><Loader2 className="w-4 h-4 animate-spin inline" /></div>;
+
+  return (
+    <div>
+      <h3 className="text-sm font-semibold text-foreground mb-3">תוצאות הבדיקות ({results.length})</h3>
+      <div className="bg-card border border-border rounded-lg overflow-hidden">
+        <div className="grid grid-cols-12 gap-3 p-3 bg-secondary/30 text-xs font-semibold text-muted-foreground border-b border-border">
+          <div className="col-span-1">מזהה</div>
+          <div className="col-span-5">בדיקה</div>
+          <div className="col-span-2">חומרה</div>
+          <div className="col-span-2">סטטוס</div>
+          <div className="col-span-2">תוצאה</div>
+        </div>
+        <div className="divide-y divide-border max-h-96 overflow-y-auto">
+          {results.map(r => (
+            <div key={r.id} className="grid grid-cols-12 gap-3 p-3 items-center hover:bg-secondary/20 transition-colors text-xs">
+              <div className="col-span-1"><code className="text-primary text-[10px]">{r.check_id}</code></div>
+              <div className="col-span-5"><span className="text-foreground">{r.check_title}</span></div>
+              <div className="col-span-2"><SeverityBadge severity={r.severity} size="sm" /></div>
+              <div className="col-span-2"><StatusBadge status={r.status} size="sm" /></div>
+              <div className="col-span-2">
+                <span className={cn(
+                  "text-[10px] font-medium",
+                  r.status === 'passed' ? 'text-green-400' :
+                  r.status === 'failed' ? 'text-red-400' :
+                  r.status === 'warning' ? 'text-amber-400' : 'text-blue-400'
+                )}>
+                  {r.actual_value?.substring(0, 20) || '—'}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const REPORT_TYPES = [
   { value: 'executive_summary', label: 'דוח מנהלים (Executive Summary)', icon: '📊', desc: 'סיכום ברמה גבוהה לניהול, כולל ציון כולל, סיכונים עיקריים והמלצות מפתח.' },
@@ -438,35 +491,73 @@ export default function Reports() {
       </Dialog>
 
       {/* View Report Dialog */}
-      {viewReport && (
-        <Dialog open={!!viewReport} onOpenChange={() => setViewReport(null)}>
-          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto" dir="rtl">
-            <DialogHeader>
-              <DialogTitle>{viewReport.title}</DialogTitle>
-            </DialogHeader>
-            <div className="mt-2 space-y-4">
-              <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                <span>{viewReport.tenant_name}</span>
-                <span>{viewReport.scan_date ? new Date(viewReport.scan_date).toLocaleDateString('he-IL') : ''}</span>
-                <span>ציון: {viewReport.overall_score}/100</span>
-              </div>
-              <div className="prose prose-sm prose-invert max-w-none">
-                <pre className="whitespace-pre-wrap text-sm text-foreground leading-relaxed font-heebo bg-secondary/20 rounded-lg p-4">
-                  {viewReport.summary_he}
-                </pre>
-              </div>
-              <div className="flex gap-2 pt-2">
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleExportPdf(viewReport)}>
-                  <Download className="w-4 h-4" />ייצא PDF
-                </Button>
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleExportHtml(viewReport)}>
-                  <Download className="w-4 h-4" />ייצא HTML
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
+       {viewReport && (
+         <Dialog open={!!viewReport} onOpenChange={() => setViewReport(null)}>
+           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" dir="rtl">
+             <DialogHeader>
+               <div className="flex items-center justify-between gap-4 mb-2">
+                 <div className="flex-1">
+                   <DialogTitle className="text-xl">{viewReport.title}</DialogTitle>
+                   <div className="flex items-center gap-4 text-xs text-muted-foreground mt-2">
+                     <span>{viewReport.tenant_name}</span>
+                     <span>•</span>
+                     <span>{viewReport.scan_date ? new Date(viewReport.scan_date).toLocaleDateString('he-IL') : ''}</span>
+                     <span>•</span>
+                     <span>{viewReport.benchmark_version}</span>
+                   </div>
+                 </div>
+                 <ScoreRing score={viewReport.overall_score || 0} size={100} />
+               </div>
+             </DialogHeader>
+             <div className="mt-6 space-y-6">
+               {/* Statistics Grid */}
+               <div className="grid grid-cols-4 gap-3">
+                 <div className="bg-secondary/30 rounded-lg p-4 border border-border text-center">
+                   <div className="text-2xl font-bold text-green-400">{viewReport.passed_count || 0}</div>
+                   <div className="text-xs text-muted-foreground mt-1">עברו</div>
+                 </div>
+                 <div className="bg-secondary/30 rounded-lg p-4 border border-border text-center">
+                   <div className="text-2xl font-bold text-red-400">{viewReport.failed_count || 0}</div>
+                   <div className="text-xs text-muted-foreground mt-1">נכשלו</div>
+                 </div>
+                 <div className="bg-secondary/30 rounded-lg p-4 border border-border text-center">
+                   <div className="text-2xl font-bold text-red-400">{viewReport.findings_by_severity?.critical || 0}</div>
+                   <div className="text-xs text-muted-foreground mt-1">קריטיים</div>
+                 </div>
+                 <div className="bg-secondary/30 rounded-lg p-4 border border-border text-center">
+                   <div className="text-2xl font-bold text-foreground">{viewReport.total_findings || 0}</div>
+                   <div className="text-xs text-muted-foreground mt-1">סה"כ בדיקות</div>
+                 </div>
+               </div>
+
+               {/* Summary */}
+               {viewReport.summary_he && (
+                 <div>
+                   <h3 className="text-sm font-semibold text-foreground mb-3">סיכום הדוח</h3>
+                   <div className="text-sm text-muted-foreground leading-relaxed bg-secondary/20 rounded-lg p-4 whitespace-pre-wrap font-heebo">
+                     {viewReport.summary_he}
+                   </div>
+                 </div>
+               )}
+
+               {/* Results Table */}
+               {viewReport.scan_job_id && (
+                 <ReportResultsTable scanJobId={viewReport.scan_job_id} />
+               )}
+
+               {/* Export Buttons */}
+               <div className="flex gap-2 pt-4 border-t border-border">
+                 <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleExportPdf(viewReport)}>
+                   <Download className="w-4 h-4" />ייצא PDF
+                 </Button>
+                 <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleExportHtml(viewReport)}>
+                   <Download className="w-4 h-4" />ייצא HTML
+                 </Button>
+               </div>
+             </div>
+           </DialogContent>
+         </Dialog>
+       )}
     </div>
   );
 }
