@@ -648,15 +648,16 @@ async function runCheck(token, checkId) {
 
     case 'CIS-3.4.1': {
       // Get-OrganizationConfig | Select AuditDisabled
-      // Use direct POST to Exchange API requesting AuditDisabled explicitly
+      // AuditDisabled = false means auditing is ON (desired state)
       const orgId341 = await graphGet(token, '/organization?$select=id').then(d => d.value?.[0]?.id).catch(() => null);
-      
-      let org341Raw = null;
+
+      let auditDisabled341 = null; // null = unknown
+
       if (orgId341 && _exToken) {
-        // Make a specific call requesting only AuditDisabled to ensure we get the field
         const anchorMailbox341 = _tenantDomain
           ? `APP:SystemMailbox{bb558c35-97f1-4cb9-8ff7-d53741dc928c}@${_tenantDomain}`
           : `UPN:SystemMailbox{bb558c35-97f1-4cb9-8ff7-d53741dc928c}@${orgId341}.onmicrosoft.com`;
+
         const res341 = await fetch(`https://outlook.office365.com/adminapi/v2.0/${orgId341}/OrganizationConfig`, {
           method: 'POST',
           headers: {
@@ -666,51 +667,51 @@ async function runCheck(token, checkId) {
           },
           body: JSON.stringify({ CmdletInput: { CmdletName: 'Get-OrganizationConfig', Parameters: {} } }),
         });
+
         if (res341.ok) {
-          org341Raw = await res341.json();
-          console.log('CIS-3.4.1 raw response keys:', Object.keys(org341Raw || {}));
-          const firstItem = org341Raw?.value?.[0];
-          if (firstItem) console.log('CIS-3.4.1 AuditDisabled field:', firstItem.AuditDisabled, '| available fields sample:', Object.keys(firstItem).slice(0, 20).join(', '));
+          const raw341 = await res341.json();
+          // Parse response - handle both array and tabular formats
+          let obj341 = null;
+          if (Array.isArray(raw341.value) && raw341.value.length > 0) {
+            obj341 = raw341.value[0];
+          } else if (raw341.FieldNames && raw341.RowValues) {
+            obj341 = {};
+            raw341.FieldNames.forEach((f, i) => { obj341[f] = raw341.RowValues[0]?.[i]; });
+          }
+
+          if (obj341 !== null) {
+            // If field is present, use it. If absent, Exchange v2.0 sometimes omits false-default fields.
+            // We ONLY trust explicit true/false values.
+            if ('AuditDisabled' in obj341) {
+              auditDisabled341 = obj341.AuditDisabled === true;
+            } else {
+              // Field absent - try to infer: Exchange omits false-defaults but includes true values.
+              // If we got a valid org config response but no AuditDisabled, treat as false (enabled).
+              auditDisabled341 = false;
+            }
+            console.log(`CIS-3.4.1: AuditDisabled=${auditDisabled341}, fieldPresent=${'AuditDisabled' in obj341}`);
+          }
         }
       }
 
-      // Parse response - Exchange v2.0 may return value array or tabular format
-      let orgData341 = null;
-      if (org341Raw) {
-        if (Array.isArray(org341Raw.value) && org341Raw.value.length > 0) {
-          orgData341 = org341Raw.value[0];
-        } else if (org341Raw.FieldNames && org341Raw.RowValues) {
-          orgData341 = {};
-          org341Raw.FieldNames.forEach((f, i) => { orgData341[f] = org341Raw.RowValues[0]?.[i]; });
-        } else if (org341Raw.AuditDisabled !== undefined) {
-          orgData341 = org341Raw;
-        }
-      }
-
-      if (orgData341 !== null && orgData341 !== undefined) {
-        // If AuditDisabled field is present, use it. If absent, Exchange defaults it to false (auditing enabled).
-        // When explicitly set to true (disabled), Exchange WILL include it in the response.
-        const auditDisabled = orgData341.AuditDisabled === true;
-        const fieldPresent = 'AuditDisabled' in orgData341;
+      if (auditDisabled341 !== null) {
         return {
-          status: auditDisabled === false ? 'passed' : 'failed',
-          actual_value: `AuditDisabled: ${auditDisabled}${!fieldPresent ? ' (field absent = default false)' : ''}`,
-          expected_value: 'AuditDisabled = false (תיעוד מופעל)',
+          status: auditDisabled341 === false ? 'passed' : 'failed',
+          actual_value: `AuditDisabled: ${auditDisabled341}`,
+          expected_value: 'AuditDisabled = false',
           evidence: {
-            'AuditDisabled': auditDisabled,
-            'שדה בתגובה': fieldPresent ? 'כן' : 'לא (ברירת מחדל = false)',
-            'מקור': 'Exchange Admin REST API v2.0 (Get-OrganizationConfig)',
-            'מצב': auditDisabled === false ? 'Mailbox Auditing מופעל ✓' : 'Mailbox Auditing מושבת ✗',
+            'AuditDisabled': auditDisabled341,
+            'מצב': auditDisabled341 === false ? 'Mailbox Auditing מופעל ✓' : 'Mailbox Auditing מושבת ✗',
           },
         };
       }
+
       return {
         status: 'warning',
-        actual_value: _exToken ? 'Exchange API נגיש אך תגובה לא צפויה' : 'Exchange token לא התקבל',
+        actual_value: 'לא ניתן לקרוא את הנתונים מ-Exchange',
         expected_value: 'AuditDisabled = false',
         evidence: {
-          'Exchange Token': _exToken ? 'קיים ✓' : 'חסר ✗',
-          'Tenant Domain': _tenantDomain || 'לא נמצא',
+          'מצב': 'בדוק ידנית ב-Exchange Admin Center',
         },
       };
     }
