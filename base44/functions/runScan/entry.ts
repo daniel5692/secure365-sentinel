@@ -1057,9 +1057,19 @@ async function runCheck(token, checkId) {
 
     // --- Intune ---
     case 'CIS-4.1': {
-      const compPolicies = await graphGet(token, '/deviceManagement/deviceCompliancePolicies?$select=id,displayName&$top=10').catch(() => null);
-      if (!compPolicies) return { status: 'warning', actual_value: 'Cannot access Intune', expected_value: 'Devices without policy = Not Compliant', evidence: { 'הערה': 'Intune → Devices → Compliance → Compliance policy settings' } };
-      return { status: 'manual', actual_value: `Intune accessible; ${(compPolicies.value || []).length} compliance policies found`, expected_value: 'Mark devices with no compliance policy as Not compliant', evidence: { 'מדיניות': (compPolicies.value || []).map(p => p.displayName).join(', ') || 'אין', 'הערה': 'Intune → Devices → Compliance → Compliance policy settings' } };
+      const settings41 = await graphGet(token, '/deviceManagement/settings').catch(() => null);
+      if (!settings41) return { status: 'warning', actual_value: 'Cannot access Intune deviceManagement/settings', expected_value: 'secureByDefault = true', evidence: { 'הערה': 'ודא הרשאת DeviceManagementConfiguration.Read.All' } };
+      const secureByDefault = settings41.secureByDefault;
+      return {
+        status: secureByDefault === true ? 'passed' : 'failed',
+        actual_value: `secureByDefault: ${secureByDefault}`,
+        expected_value: 'secureByDefault = true',
+        evidence: {
+          'secureByDefault': secureByDefault,
+          'משמעות': secureByDefault ? 'מכשירים ללא policy = Not Compliant ✓' : 'מכשירים ללא policy = Compliant ✗',
+          'תיקון': 'Intune admin center → Devices → Compliance → Compliance policy settings → Mark devices with no compliance policy as: Not compliant',
+        },
+      };
     }
 
     case 'CIS-4.2': {
