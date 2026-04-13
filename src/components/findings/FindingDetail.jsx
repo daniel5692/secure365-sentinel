@@ -1,9 +1,12 @@
-import { Shield, AlertTriangle, CheckCircle2, XCircle, Info, Wrench } from "lucide-react";
+import { useState } from "react";
+import { Shield, AlertTriangle, CheckCircle2, XCircle, Info, Wrench, ShieldCheck } from "lucide-react";
 import SeverityBadge from "@/components/shared/SeverityBadge";
 import StatusBadge from "@/components/shared/StatusBadge";
+import OverridePanel from "@/components/findings/OverridePanel";
 import { DOMAIN_META } from "@/lib/security-checks";
 import { getAllChecks } from "@/lib/security-checks";
 import { cn } from "@/lib/utils";
+import { base44 } from "@/api/base44Client";
 
 function parseEvidence(evidenceStr) {
   if (!evidenceStr) return {};
@@ -86,9 +89,37 @@ function ValueComparison({ actual, expected, status }) {
   );
 }
 
-export default function FindingDetail({ finding }) {
+export default function FindingDetail({ finding, onOverrideChange }) {
   const checkDef = getAllChecks().find(c => c.id === finding.check_id);
   const domainMeta = DOMAIN_META[finding.domain];
+  const [localFinding, setLocalFinding] = useState(finding);
+  const [saving, setSaving] = useState(false);
+
+  const handleSaveOverride = async (overrideStatus, note) => {
+    setSaving(true);
+    const user = await base44.auth.me();
+    const updated = {
+      override_status: overrideStatus,
+      override_note: note,
+      override_by: user.email,
+      override_date: new Date().toISOString(),
+    };
+    await base44.entities.CheckResult.update(finding.id, updated);
+    const newFinding = { ...localFinding, ...updated };
+    setLocalFinding(newFinding);
+    setSaving(false);
+    onOverrideChange?.(newFinding);
+  };
+
+  const handleClearOverride = async () => {
+    setSaving(true);
+    const updated = { override_status: null, override_note: null, override_by: null, override_date: null };
+    await base44.entities.CheckResult.update(finding.id, updated);
+    const newFinding = { ...localFinding, ...updated };
+    setLocalFinding(newFinding);
+    setSaving(false);
+    onOverrideChange?.(newFinding);
+  };
 
   return (
     <div className="p-5 bg-secondary/10 border-t border-border space-y-5">
@@ -96,26 +127,31 @@ export default function FindingDetail({ finding }) {
       <div className="bg-card border border-border rounded-xl p-6">
         <div className="flex items-start gap-4">
           <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-            <Shield className="w-6 h-6 text-primary" />
+            {localFinding.override_status ? <ShieldCheck className="w-6 h-6 text-purple-400" /> : <Shield className="w-6 h-6 text-primary" />}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2 mb-2">
-              <code className="text-xs font-mono text-primary bg-primary/10 px-2 py-0.5 rounded">{finding.check_id}</code>
-              <SeverityBadge severity={finding.severity} />
-              <StatusBadge status={finding.status} />
+              <code className="text-xs font-mono text-primary bg-primary/10 px-2 py-0.5 rounded">{localFinding.check_id}</code>
+              <SeverityBadge severity={localFinding.severity} />
+              <StatusBadge status={localFinding.status} />
+              {localFinding.override_status && (
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                  Override פעיל
+                </span>
+              )}
             </div>
-            <h1 className="text-lg font-bold text-foreground mb-1">{checkDef?.title || finding.check_title}</h1>
+            <h1 className="text-lg font-bold text-foreground mb-1">{checkDef?.title || localFinding.check_title}</h1>
             {checkDef?.titleHe && (
               <p className="text-sm text-muted-foreground mb-1">{checkDef.titleHe}</p>
             )}
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span className={cn("px-2 py-0.5 rounded-md border text-[11px]",
                 `bg-${domainMeta?.color || 'blue'}-500/10 border-${domainMeta?.color || 'blue'}-500/30 text-${domainMeta?.color || 'blue'}-400`
-              )}>{domainMeta?.labelHe || finding.domain}</span>
+              )}>{domainMeta?.labelHe || localFinding.domain}</span>
               <span>•</span>
-              <span>{finding.category}</span>
+              <span>{localFinding.category}</span>
               <span>•</span>
-              <span className="font-mono">{checkDef?.benchmarkRef || finding.benchmark_ref || 'CIS M365 v6.0.1'}</span>
+              <span className="font-mono">{checkDef?.benchmarkRef || localFinding.benchmark_ref || 'CIS M365 v6.0.1'}</span>
             </div>
           </div>
         </div>
@@ -131,14 +167,14 @@ export default function FindingDetail({ finding }) {
               <Info className="w-4 h-4 text-primary" />
               תוצאת הבדיקה
             </h3>
-            <ValueComparison actual={finding.actual_value} expected={finding.expected_value} status={finding.status} />
+            <ValueComparison actual={localFinding.actual_value} expected={localFinding.expected_value} status={localFinding.status} />
           </div>
 
           {/* Evidence breakdown */}
-          {finding.evidence && (
+          {localFinding.evidence && (
             <div className="bg-card border border-border rounded-xl p-5">
               <h3 className="text-sm font-semibold text-foreground mb-4">פירוט ממצאים</h3>
-              <EvidenceCard evidence={finding.evidence} />
+              <EvidenceCard evidence={localFinding.evidence} />
             </div>
           )}
 
@@ -162,7 +198,7 @@ export default function FindingDetail({ finding }) {
           )}
 
           {/* Remediation */}
-          {(finding.status === 'failed' || finding.status === 'warning') && checkDef?.remediationHe && (
+          {(localFinding.status === 'failed' || localFinding.status === 'warning') && checkDef?.remediationHe && (
             <div className="bg-green-500/5 border border-green-500/20 rounded-xl p-5">
               <h3 className="text-sm font-semibold text-green-400 mb-3 flex items-center gap-2">
                 <Wrench className="w-4 h-4" />
@@ -177,14 +213,22 @@ export default function FindingDetail({ finding }) {
 
         {/* Sidebar */}
         <div className="space-y-5">
+          {/* Override Panel */}
+          <OverridePanel
+            finding={localFinding}
+            onSave={handleSaveOverride}
+            onClear={handleClearOverride}
+            saving={saving}
+          />
+
           {/* Metadata */}
           <div className="bg-card border border-border rounded-xl p-5">
             <h3 className="text-sm font-semibold text-foreground mb-4">פרטי הבדיקה</h3>
             <div className="space-y-3">
-              <MetaRow label="מזהה" value={finding.check_id} mono />
+              <MetaRow label="מזהה" value={localFinding.check_id} mono />
               <MetaRow label="Framework" value="CIS M365 v6.0.1" />
-              <MetaRow label="תחום" value={domainMeta?.labelHe || finding.domain} />
-              <MetaRow label="קטגוריה" value={finding.category} />
+              <MetaRow label="תחום" value={domainMeta?.labelHe || localFinding.domain} />
+              <MetaRow label="קטגוריה" value={localFinding.category} />
               {checkDef?.graphApiEndpoint && (
                 <MetaRow label="Graph API" value={checkDef.graphApiEndpoint} mono />
               )}
@@ -204,25 +248,29 @@ export default function FindingDetail({ finding }) {
           {/* Status indicator */}
           <div className={cn(
             "rounded-xl p-4 border text-center",
-            finding.status === 'passed' ? 'bg-green-500/10 border-green-500/30' :
-            finding.status === 'failed' ? 'bg-red-500/10 border-red-500/30' :
-            finding.status === 'warning' ? 'bg-amber-500/10 border-amber-500/30' :
+            localFinding.override_status ? 'bg-purple-500/10 border-purple-500/30' :
+            localFinding.status === 'passed' ? 'bg-green-500/10 border-green-500/30' :
+            localFinding.status === 'failed' ? 'bg-red-500/10 border-red-500/30' :
+            localFinding.status === 'warning' ? 'bg-amber-500/10 border-amber-500/30' :
             'bg-slate-500/10 border-slate-500/30'
           )}>
-            {finding.status === 'passed' && <CheckCircle2 className="w-8 h-8 text-green-400 mx-auto mb-2" />}
-            {finding.status === 'failed' && <XCircle className="w-8 h-8 text-red-400 mx-auto mb-2" />}
-            {finding.status === 'warning' && <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto mb-2" />}
-            {finding.status === 'not_applicable' && <Info className="w-8 h-8 text-slate-400 mx-auto mb-2" />}
+            {localFinding.override_status ? <ShieldCheck className="w-8 h-8 text-purple-400 mx-auto mb-2" /> :
+             localFinding.status === 'passed' ? <CheckCircle2 className="w-8 h-8 text-green-400 mx-auto mb-2" /> :
+             localFinding.status === 'failed' ? <XCircle className="w-8 h-8 text-red-400 mx-auto mb-2" /> :
+             localFinding.status === 'warning' ? <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto mb-2" /> :
+             <Info className="w-8 h-8 text-slate-400 mx-auto mb-2" />}
             <p className={cn("text-sm font-semibold",
-              finding.status === 'passed' ? 'text-green-400' :
-              finding.status === 'failed' ? 'text-red-400' :
-              finding.status === 'warning' ? 'text-amber-400' :
+              localFinding.override_status ? 'text-purple-400' :
+              localFinding.status === 'passed' ? 'text-green-400' :
+              localFinding.status === 'failed' ? 'text-red-400' :
+              localFinding.status === 'warning' ? 'text-amber-400' :
               'text-slate-400'
             )}>
-              {finding.status === 'passed' ? 'עבר בהצלחה' :
-               finding.status === 'failed' ? 'נכשל — דורש תיקון' :
-               finding.status === 'warning' ? 'אזהרה — בדוק' :
-               finding.status === 'not_applicable' ? 'לא רלוונטי' : finding.status}
+              {localFinding.override_status ? 'Override פעיל' :
+               localFinding.status === 'passed' ? 'עבר בהצלחה' :
+               localFinding.status === 'failed' ? 'נכשל — דורש תיקון' :
+               localFinding.status === 'warning' ? 'אזהרה — בדוק' :
+               localFinding.status === 'not_applicable' ? 'לא רלוונטי' : localFinding.status}
             </p>
           </div>
         </div>

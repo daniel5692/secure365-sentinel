@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Search, ChevronLeft } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -20,6 +20,10 @@ export default function Findings() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [domainFilter, setDomainFilter] = useState('all');
   const [expandedFinding, setExpandedFinding] = useState(null);
+
+  const handleOverrideChange = useCallback((updatedFinding) => {
+    setResults(prev => prev.map(r => r.id === updatedFinding.id ? { ...r, ...updatedFinding } : r));
+  }, []);
 
   // Read scan param from URL
   const urlParams = new URLSearchParams(window.location.search);
@@ -173,7 +177,7 @@ export default function Findings() {
                   </div>
                 </div>
                 {expandedFinding === result.id && (
-                  <FindingDetail finding={result} />
+                  <FindingDetail finding={result} onOverrideChange={handleOverrideChange} />
                 )}
               </div>
             ))}

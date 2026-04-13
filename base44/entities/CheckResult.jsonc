@@ -50,20 +50,16 @@
       "description": "Evidence data collected during the check"
     },
     "evidence_masked": {
-      "type": "string",
-      "description": "Masked version of evidence for display"
+      "type": "string"
     },
     "actual_value": {
-      "type": "string",
-      "description": "The actual configuration value found"
+      "type": "string"
     },
     "expected_value": {
-      "type": "string",
-      "description": "The expected/secure configuration value"
+      "type": "string"
     },
     "explanation_he": {
-      "type": "string",
-      "description": "Hebrew explanation of this specific finding"
+      "type": "string"
     },
     "remediation_he": {
       "type": "string"
@@ -86,6 +82,28 @@
     "is_retriable": {
       "type": "boolean",
       "default": true
+    },
+    "override_status": {
+      "type": "string",
+      "enum": [
+        "accepted_risk",
+        "compensating_control",
+        "not_applicable",
+        "remediated"
+      ],
+      "description": "Manual override by analyst"
+    },
+    "override_note": {
+      "type": "string",
+      "description": "Analyst note explaining the override"
+    },
+    "override_by": {
+      "type": "string",
+      "description": "Email of user who set the override"
+    },
+    "override_date": {
+      "type": "string",
+      "description": "ISO date when override was set"
     }
   },
   "required": [
