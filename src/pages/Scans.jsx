@@ -87,14 +87,32 @@ export default function Scans() {
     return () => clearInterval(interval);
   }, [scans, user]);
 
+  const deleteAllCheckResults = async (scanId) => {
+    // Loop until no more results (handles pagination >50)
+    while (true) {
+      const results = await base44.entities.CheckResult.filter({ scan_job_id: scanId }, '-created_date', 100);
+      if (!results || results.length === 0) break;
+      await Promise.all(results.map(r => base44.entities.CheckResult.delete(r.id)));
+      if (results.length < 100) break;
+    }
+  };
+
   const handleDeleteScan = async (e, scanId) => {
     e.preventDefault();
     e.stopPropagation();
     if (!confirm('למחוק את הסריקה וכל הממצאים שלה?')) return;
-    const results = await base44.entities.CheckResult.filter({ scan_job_id: scanId });
-    await Promise.all(results.map(r => base44.entities.CheckResult.delete(r.id)));
+    await deleteAllCheckResults(scanId);
     await base44.entities.ScanJob.delete(scanId);
     setScans(prev => prev.filter(s => s.id !== scanId));
+  };
+
+  const handleDeleteAll = async () => {
+    if (!confirm(`למחוק את כל ${filteredScans.length} הסריקות וכל הממצאים שלהן? פעולה זו אינה הפיכה.`)) return;
+    for (const scan of filteredScans) {
+      await deleteAllCheckResults(scan.id);
+      await base44.entities.ScanJob.delete(scan.id);
+    }
+    setScans(prev => prev.filter(s => !filteredScans.find(f => f.id === s.id)));
   };
 
   const filteredScans = selectedTenant === 'all'
@@ -171,6 +189,14 @@ export default function Scans() {
       )}
 
       {/* Scans List */}
+      {filteredScans.length > 0 && (
+        <div className="flex justify-end">
+          <Button variant="destructive" size="sm" className="gap-2" onClick={handleDeleteAll}>
+            <Trash2 className="w-4 h-4" />
+            מחק את כל הסריקות ({filteredScans.length})
+          </Button>
+        </div>
+      )}
       {filteredScans.length === 0 ? (
         <div className="bg-card border border-border rounded-xl p-12 text-center">
           <p className="text-sm text-muted-foreground">אין סריקות עדיין. הפעל סריקה ראשונה למעלה.</p>
