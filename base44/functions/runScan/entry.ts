@@ -1057,8 +1057,18 @@ async function runCheck(token, checkId) {
 
     // --- Intune ---
     case 'CIS-4.1': {
-      const settings41 = await graphGet(token, '/deviceManagement/settings').catch(() => null);
-      if (!settings41) return { status: 'warning', actual_value: 'Cannot access Intune deviceManagement/settings', expected_value: 'secureByDefault = true', evidence: { 'הערה': 'ודא הרשאת DeviceManagementConfiguration.Read.All' } };
+      let settings41 = null;
+      let err41 = null;
+      try {
+        settings41 = await graphGet(token, '/deviceManagement/settings');
+      } catch (e) {
+        try {
+          settings41 = await graphGet(token, '/deviceManagement/settings', 'beta');
+        } catch (e2) {
+          err41 = e2.message || e.message;
+        }
+      }
+      if (!settings41) return { status: 'warning', actual_value: `Cannot access Intune settings: ${err41}`, expected_value: 'secureByDefault = true', evidence: { 'הרשאה נדרשת': 'DeviceManagementConfiguration.Read.All', 'שגיאה': err41 } };
       const secureByDefault = settings41.secureByDefault;
       return {
         status: secureByDefault === true ? 'passed' : 'failed',
