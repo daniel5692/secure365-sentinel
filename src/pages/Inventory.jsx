@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Users, Mail, Building2, AppWindow, RefreshCw, AlertTriangle, CheckCircle2, XCircle, Key, BookUser, Trash2, UserCheck, ArrowRight, Search, ShieldAlert, Shield, ShieldCheck, ChevronDown, ChevronUp, Clock, History } from "lucide-react";
+import { Users, Mail, Building2, RefreshCw, AlertTriangle, CheckCircle2, XCircle, Key, BookUser, Trash2, UserCheck, ArrowRight, Search, ShieldAlert, Shield, ShieldCheck, ChevronDown, ChevronUp, History, Loader2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +35,8 @@ export default function Inventory() {
   const [activeSnapshotId, setActiveSnapshotId] = useState(null);
   const [activeCategory, setActiveCategory] = useState(null);
   const [runningSnapshotId, setRunningSnapshotId] = useState(null);
+  const [deletingSnapshot, setDeletingSnapshot] = useState(null);
+  const [deletingAll, setDeletingAll] = useState(false);
   const pollRef = useRef(null);
 
   const activeSnapshot = snapshots.find(s => s.id === activeSnapshotId);
@@ -48,11 +50,9 @@ export default function Inventory() {
       setTenants(connected);
       if (connected.length > 0) setSelectedTenant(connected[0]);
 
-      // Load existing snapshots
       const existing = await base44.entities.InventorySnapshot.filter({ created_by: user.email }, '-created_date', 20);
       setSnapshots(existing);
 
-      // Check if any are still running
       const running = existing.find(s => s.status === 'running');
       if (running) {
         setRunningSnapshotId(running.id);
@@ -82,12 +82,32 @@ export default function Inventory() {
     }, 5000);
   };
 
+  const handleDeleteSnapshot = async (e, snapshotId) => {
+    e.stopPropagation();
+    if (!confirm('למחוק סריקת מלאי זו?')) return;
+    setDeletingSnapshot(snapshotId);
+    await base44.entities.InventorySnapshot.delete(snapshotId);
+    const updated = snapshots.filter(s => s.id !== snapshotId);
+    setSnapshots(updated);
+    if (activeSnapshotId === snapshotId) setActiveSnapshotId(updated[0]?.id || null);
+    setDeletingSnapshot(null);
+  };
+
+  const handleDeleteAllSnapshots = async () => {
+    if (!confirm(`למחוק את כל ${snapshots.length} סריקות המלאי?`)) return;
+    setDeletingAll(true);
+    await Promise.all(snapshots.map(s => base44.entities.InventorySnapshot.delete(s.id)));
+    setSnapshots([]);
+    setActiveSnapshotId(null);
+    setActiveCategory(null);
+    setDeletingAll(false);
+  };
+
   const startInventory = async () => {
     if (!selectedTenant) return;
     const now = new Date();
     const label = now.toLocaleDateString('he-IL') + ' ' + now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
 
-    // Create snapshot record
     const snap = await base44.entities.InventorySnapshot.create({
       tenant_id: selectedTenant.tenant_id,
       tenant_name: selectedTenant.tenant_name,
@@ -101,7 +121,6 @@ export default function Inventory() {
     setActiveCategory(null);
     startPolling(snap.id);
 
-    // Fire and forget — runs in background
     base44.functions.invoke('runInventory', {
       customer_tenant_id: selectedTenant.tenant_id,
       tenant_name: selectedTenant.tenant_name,
@@ -122,7 +141,6 @@ export default function Inventory() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-foreground">מלאי טננט</h1>
@@ -142,7 +160,6 @@ export default function Inventory() {
         </div>
       </div>
 
-      {/* Running banner */}
       {isRunning && (
         <div className="flex items-center gap-3 bg-primary/10 border border-primary/30 rounded-xl p-4">
           <RefreshCw className="w-5 h-5 text-primary animate-spin flex-shrink-0" />
@@ -153,26 +170,39 @@ export default function Inventory() {
         </div>
       )}
 
-      {/* History selector */}
       {snapshots.length > 0 && (
         <div className="flex items-center gap-3 flex-wrap">
           <History className="w-4 h-4 text-muted-foreground flex-shrink-0" />
           <span className="text-xs text-muted-foreground">היסטוריה:</span>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap flex-1">
             {snapshots.map(s => (
-              <button key={s.id} onClick={() => { setActiveSnapshotId(s.id); setActiveCategory(null); }}
-                className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs transition-all",
-                  s.id === activeSnapshotId
-                    ? "bg-primary/10 border-primary/40 text-primary"
-                    : "bg-card border-border text-muted-foreground hover:border-border hover:text-foreground"
-                )}>
-                {s.status === 'running' ? <RefreshCw className="w-3 h-3 animate-spin" /> :
-                 s.status === 'failed' ? <XCircle className="w-3 h-3 text-red-400" /> :
-                 <CheckCircle2 className="w-3 h-3 text-green-400" />}
-                {s.snapshot_label || new Date(s.created_date).toLocaleDateString('he-IL')}
-              </button>
+              <div key={s.id} className="relative flex items-center group">
+                <button
+                  onClick={() => { setActiveSnapshotId(s.id); setActiveCategory(null); }}
+                  className={cn("flex items-center gap-1.5 px-3 py-1.5 pr-7 rounded-lg border text-xs transition-all",
+                    s.id === activeSnapshotId
+                      ? "bg-primary/10 border-primary/40 text-primary"
+                      : "bg-card border-border text-muted-foreground hover:border-border hover:text-foreground"
+                  )}>
+                  {deletingSnapshot === s.id ? <Loader2 className="w-3 h-3 animate-spin" /> :
+                   s.status === 'running' ? <RefreshCw className="w-3 h-3 animate-spin" /> :
+                   s.status === 'failed' ? <XCircle className="w-3 h-3 text-red-400" /> :
+                   <CheckCircle2 className="w-3 h-3 text-green-400" />}
+                  {s.snapshot_label || new Date(s.created_date).toLocaleDateString('he-IL')}
+                </button>
+                <button
+                  onClick={(e) => handleDeleteSnapshot(e, s.id)}
+                  disabled={deletingSnapshot === s.id || s.status === 'running'}
+                  className="absolute left-1 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-red-500/20 text-muted-foreground hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-0">
+                  <Trash2 className="w-2.5 h-2.5" />
+                </button>
+              </div>
             ))}
           </div>
+          <Button variant="destructive" size="sm" className="gap-1.5 text-xs" onClick={handleDeleteAllSnapshots} disabled={deletingAll || isRunning}>
+            {deletingAll ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+            מחק הכל
+          </Button>
         </div>
       )}
 
@@ -201,7 +231,6 @@ export default function Inventory() {
         </div>
       )}
 
-      {/* Category cards */}
       {data && stats && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {CATEGORIES.map(cat => {
@@ -395,11 +424,9 @@ function AppCredsDetail({ apps, search }) {
 
   return (
     <div className="overflow-x-auto">
-      {/* Filters */}
       <div className="flex items-center gap-3 p-4 border-b border-border flex-wrap">
         <FilterBar threatFilter={threatFilter} setThreatFilter={setThreatFilter} credFilter={credFilter} setCredFilter={setCredFilter} total={apps.length} shown={filtered.length} />
       </div>
-      {/* Table header */}
       <div className="grid grid-cols-12 gap-3 px-5 py-3 bg-secondary/30 text-[11px] font-semibold text-muted-foreground border-b border-border min-w-[600px]">
         <div className="col-span-4">שם אפליקציה</div>
         <div className="col-span-2">רמת סיכון</div>
@@ -451,7 +478,6 @@ function AppCredsDetail({ apps, search }) {
 
               {isExpanded && (
                 <div className="px-5 pb-4 bg-secondary/10 border-t border-border">
-                  {/* Credentials */}
                   {app.credentials.length > 0 && (
                     <div className="py-3">
                       <div className="text-[11px] font-semibold text-muted-foreground mb-2">קרדנציאלים</div>
@@ -468,8 +494,6 @@ function AppCredsDetail({ apps, search }) {
                       </div>
                     </div>
                   )}
-
-                  {/* Permissions */}
                   {app.permissions?.length > 0 && (
                     <div className="py-3">
                       <div className="text-[11px] font-semibold text-muted-foreground mb-2">

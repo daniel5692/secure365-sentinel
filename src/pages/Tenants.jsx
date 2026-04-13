@@ -70,10 +70,10 @@ export default function Tenants() {
     const scans = await base44.entities.ScanJob.filter({ tenant_id: tenant.id });
     await Promise.all(scans.map(s => base44.functions.invoke('deleteScan', { scan_job_id: s.id })));
 
-    // 2. Delete reports, snapshots, and the tenant in parallel
+    // 2. Delete reports, snapshots (by Microsoft tenant_id GUID), and the tenant in parallel
     const [reports, snapshots] = await Promise.all([
       base44.entities.Report.filter({ tenant_id: tenant.id }),
-      base44.entities.InventorySnapshot.filter({ tenant_id: tenant.id }),
+      base44.entities.InventorySnapshot.filter({ tenant_id: tenant.tenant_id }),
     ]);
     await Promise.all([
       ...reports.map(r => base44.entities.Report.delete(r.id)),
