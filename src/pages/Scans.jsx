@@ -98,8 +98,12 @@ export default function Scans() {
   const handleDeleteAll = async () => {
     if (!confirm(`למחוק את כל ${filteredScans.length} הסריקות וכל הממצאים שלהן? פעולה זו אינה הפיכה.`)) return;
     const ids = filteredScans.map(s => s.id);
-    await Promise.all(ids.map(id => base44.functions.invoke('deleteScan', { scan_job_id: id })));
+    // Remove from UI immediately
     setScans(prev => prev.filter(s => !ids.includes(s.id)));
+    // Delete sequentially to avoid rate limiting
+    for (const id of ids) {
+      await base44.functions.invoke('deleteScan', { scan_job_id: id });
+    }
   };
 
   const filteredScans = selectedTenant === 'all'
