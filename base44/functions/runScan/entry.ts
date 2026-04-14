@@ -73,11 +73,11 @@ const EXCHANGE_RESOURCE_MAP = {
 async function exchangeGet(tenantId, resource) {
   if (!_exToken) return null;
   const map = EXCHANGE_RESOURCE_MAP[resource] || { endpoint: resource, cmdlet: `Get-${resource}` };
+  // X-AnchorMailbox is mandatory for v2.0 — use fixed system mailbox GUID
   const anchorMailbox = _tenantDomain
     ? `APP:SystemMailbox{bb558c35-97f1-4cb9-8ff7-d53741dc928c}@${_tenantDomain}`
     : `UPN:SystemMailbox{bb558c35-97f1-4cb9-8ff7-d53741dc928c}@${tenantId}.onmicrosoft.com`;
-  // The correct Exchange REST v2 format uses 'CommandletInput' (not 'CmdletInput')
-  const res = await fetch(`https://outlook.office365.com/adminapi/v2.0/${tenantId}/CommandletInput`, {
+  const res = await fetch(`https://outlook.office365.com/adminapi/v2.0/${tenantId}/${map.endpoint}`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${_exToken}`,
