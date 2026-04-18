@@ -1,39 +1,49 @@
-**Welcome to your Base44 project** 
+**Welcome to your Base44 project**
 
-**About**
+## About
 
-View and Edit  your app on [Base44.com](http://Base44.com) 
+View and edit your app on [Base44.com](http://Base44.com).
 
-This project contains everything you need to run your app locally.
+This project contains everything you need to run your app locally and push updates that can be published from Base44.
 
-**Edit the code in your local development environment**
+## Run locally
 
-Any change pushed to the repo will also be reflected in the Base44 Builder.
+1. Clone the repository.
+2. Navigate to the project directory.
+3. Install dependencies:
 
-**Prerequisites:** 
-
-1. Clone the repository using the project's Git URL 
-2. Navigate to the project directory
-3. Install dependencies: `npm install`
-4. Create an `.env.local` file and set the right environment variables
-
+```bash
+npm install
 ```
+
+4. Copy the example environment file and fill in your Base44 values:
+
+```bash
+cp .env.example .env.local
+```
+
+Required variables:
+
+```bash
 VITE_BASE44_APP_ID=your_app_id
-VITE_BASE44_APP_BASE_URL=your_backend_url
-
-e.g.
-VITE_BASE44_APP_ID=cbef744a8545c389ef439ea6
-VITE_BASE44_APP_BASE_URL=https://my-to-do-list-81bfaad7.base44.app
+VITE_BASE44_APP_BASE_URL=https://your-project.base44.app
 ```
 
-Run the app: `npm run dev`
+5. Start the app:
 
-**Publish your changes**
+```bash
+npm run dev
+```
 
-Open [Base44.com](http://Base44.com) and click on Publish.
+## Upload / publish to Base44
 
-**Docs & Support**
+1. Commit and push your changes to the connected GitHub repository.
+2. Open your project on [Base44.com](http://Base44.com).
+3. Click **Publish** to deploy the latest synced version.
 
-Documentation: [https://docs.base44.com/Integrations/Using-GitHub](https://docs.base44.com/Integrations/Using-GitHub)
+> Note: Base44 publish requires access to the Base44 workspace connected to this app.
 
-Support: [https://app.base44.com/support](https://app.base44.com/support)
+## Docs & Support
+
+- Documentation: <https://docs.base44.com/Integrations/Using-GitHub>
+- Support: <https://app.base44.com/support>
